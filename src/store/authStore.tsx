@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { User, onAuthStateChanged } from "firebase/auth";
 import { firebaseAuth } from "../services/firebase";
@@ -17,6 +17,7 @@ export type AuthState = {
   setRole: (role: UserRole) => Promise<void>;
   completeProfile: (profile: ApiUser) => Promise<void>;
   signOut: () => Promise<void>;
+  markFreshLogin: () => void;
 };
 
 const ROLE_KEY = "taskero_role";
@@ -30,6 +31,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRoleState] = useState<UserRole>("customer");
   const [dbUserId, setDbUserId] = useState<string | null>(null);
   const [hasProfile, setHasProfile] = useState(false);
+  // Tracks whether the current Firebase session was established in this app session
+  // (vs. persisted from a previous launch). Used to decide whether to sign out
+  // when no backend profile is found.
+  const isFreshLoginRef = useRef(false);
 
   useEffect(() => {
     const bootstrap = async () => {
@@ -46,7 +51,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    let isFirstEvent = true;
+
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (nextUser) => {
+      const isPersistedSession = isFirstEvent && !isFreshLoginRef.current;
+      isFirstEvent = false;
+
       setUser(nextUser);
       if (!nextUser) {
         setHasProfile(false);
@@ -59,7 +69,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const profile = await lookupUserProfile(nextUser);
         if (profile) {
           await applyProfile(profile);
+        } else if (isPersistedSession) {
+          // Persisted Firebase session but no backend profile — sign out so the
+          // user lands on the login screen rather than the account creation flow.
+          await firebaseAuth.signOut();
+          setHasProfile(false);
         } else {
+          // Fresh login with no backend profile — let them complete registration.
           setHasProfile(false);
         }
       } catch {
@@ -93,6 +109,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await applyProfile(profile);
   };
 
+  const markFreshLogin = () => {
+    isFreshLoginRef.current = true;
+  };
+
   const signOut = async () => {
     await firebaseAuth.signOut();
     await AsyncStorage.multiRemove([ROLE_KEY, USER_ID_KEY]);
@@ -111,6 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setRole,
       completeProfile,
       signOut,
+      markFreshLogin,
     }),
     [user, isAuthLoading, hasProfile, role, dbUserId]
   );

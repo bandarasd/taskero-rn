@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import * as Google from "expo-auth-session/providers/google";
 import { FirebaseRecaptchaVerifierModal } from "expo-firebase-recaptcha";
@@ -21,11 +22,13 @@ import {
 } from "firebase/auth";
 import { env } from "../services/env";
 import { firebaseAuth, firebaseConfig } from "../services/firebase";
+import { useAuth } from "../store/authStore";
 import { colors } from "../theme/colors";
 
 type Step = "phone" | "otp" | "email";
 
 export function AuthScreen() {
+  const { markFreshLogin } = useAuth();
   const [step, setStep] = useState<Step>("phone");
   const [countryCode] = useState("+94");
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -38,6 +41,7 @@ export function AuthScreen() {
   const [loading, setLoading] = useState(false);
 
   const recaptchaRef = useRef<FirebaseRecaptchaVerifierModal>(null);
+  const otpRefs = useRef<(TextInput | null)[]>([]);
 
   WebBrowser.maybeCompleteAuthSession();
 
@@ -58,6 +62,7 @@ export function AuthScreen() {
       const accessToken = response.authentication?.accessToken;
       if (!idToken) { setError("Google sign-in failed: missing ID token."); return; }
       const credential = GoogleAuthProvider.credential(idToken, accessToken);
+      markFreshLogin();
       await signInWithCredential(firebaseAuth, credential);
     };
     signInFromGoogle().catch((err: unknown) => {
@@ -95,6 +100,7 @@ export function AuthScreen() {
     setLoading(true);
     try {
       const credential = PhoneAuthProvider.credential(verificationId, otpCode);
+      markFreshLogin();
       await signInWithCredential(firebaseAuth, credential);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid code");
@@ -108,6 +114,7 @@ export function AuthScreen() {
     setError(null);
     setLoading(true);
     try {
+      markFreshLogin();
       if (isRegistering) {
         await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
       } else {
@@ -164,15 +171,33 @@ export function AuthScreen() {
       {step === "otp" && (
         <>
           <Text style={styles.label}>Enter OTP sent to {countryCode} {phoneNumber}</Text>
-          <TextInput
-            style={styles.otpInput}
-            placeholder="------"
-            placeholderTextColor="#9CA3AF"
-            value={otpCode}
-            onChangeText={setOtpCode}
-            keyboardType="number-pad"
-            maxLength={6}
-          />
+          <View style={styles.otpRow}>
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <TextInput
+                key={i}
+                ref={(el) => { otpRefs.current[i] = el; }}
+                style={[styles.otpBox, otpCode[i] ? styles.otpBoxFilled : null]}
+                value={otpCode[i] ?? ""}
+                onChangeText={(val) => {
+                  const digit = val.replace(/[^0-9]/g, "").slice(-1);
+                  const next = otpCode.split("");
+                  next[i] = digit;
+                  const joined = next.join("").slice(0, 6);
+                  setOtpCode(joined);
+                  if (digit && i < 5) otpRefs.current[i + 1]?.focus();
+                }}
+                onKeyPress={({ nativeEvent }) => {
+                  if (nativeEvent.key === "Backspace" && !otpCode[i] && i > 0) {
+                    otpRefs.current[i - 1]?.focus();
+                  }
+                }}
+                keyboardType="number-pad"
+                maxLength={1}
+                textAlign="center"
+                selectTextOnFocus
+              />
+            ))}
+          </View>
           <Pressable style={[styles.primaryBtn, loading && styles.disabled]} onPress={handleVerifyOtp} disabled={loading}>
             <Text style={styles.primaryBtnText}>{loading ? "Verifying..." : "Verify"}</Text>
           </Pressable>
@@ -229,7 +254,7 @@ export function AuthScreen() {
             onPress={() => promptAsync()}
             disabled={!request || !isGoogleEnabled}
           >
-            <Text style={styles.socialIcon}>🍎</Text>
+            <FontAwesome name="apple" size={20} color="#111111" style={styles.socialIconView} />
             <Text style={styles.socialBtnText}>Continue with Apple</Text>
           </Pressable>
 
@@ -238,12 +263,12 @@ export function AuthScreen() {
             onPress={() => promptAsync()}
             disabled={!request || !isGoogleEnabled}
           >
-            <Text style={styles.socialIcon}>G</Text>
+            <FontAwesome name="google" size={20} color="#4285F4" style={styles.socialIconView} />
             <Text style={styles.socialBtnText}>Continue with Google</Text>
           </Pressable>
 
           <Pressable style={styles.socialBtn} onPress={() => setStep("email")}>
-            <Text style={styles.socialIcon}>✉</Text>
+            <MaterialIcons name="email" size={20} color="#6B7280" style={styles.socialIconView} />
             <Text style={styles.socialBtnText}>Continue with Email</Text>
           </Pressable>
         </>
@@ -318,18 +343,26 @@ const styles = StyleSheet.create({
     color: "#111111",
     backgroundColor: "#F9FAFB",
   },
-  otpInput: {
-    borderWidth: 1,
+  otpRow: {
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "center",
+    marginBottom: 24,
+  },
+  otpBox: {
+    width: 46,
+    height: 56,
+    borderWidth: 1.5,
     borderColor: "#E5E7EB",
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
     fontSize: 22,
+    fontWeight: "700",
     color: "#111111",
     backgroundColor: "#F9FAFB",
-    textAlign: "center",
-    letterSpacing: 8,
-    marginBottom: 20,
+  },
+  otpBoxFilled: {
+    borderColor: colors.brandGreen,
+    backgroundColor: "#FFFFFF",
   },
   input: {
     borderWidth: 1,
@@ -370,7 +403,7 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: "#FFFFFF",
   },
-  socialIcon: { fontSize: 18, fontWeight: "700", color: "#111111", width: 24, textAlign: "center" },
+  socialIconView: { width: 24, textAlign: "center" },
   socialBtnText: { fontSize: 15, fontWeight: "600", color: "#111111" },
   linkBtn: { paddingVertical: 12, alignItems: "center" },
   linkText: { color: colors.brandGreen, fontWeight: "600", fontSize: 14 },

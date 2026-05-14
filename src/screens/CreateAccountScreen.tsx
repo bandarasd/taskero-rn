@@ -1,8 +1,17 @@
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useAuth, UserRole } from "../store/authStore";
 import { createUser } from "../services/userService";
 import { colors } from "../theme/colors";
+import { Input } from "../components/common/Input";
 
 export function CreateAccountScreen() {
   const { user, completeProfile } = useAuth();
@@ -41,136 +50,232 @@ export function CreateAccountScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Create your account</Text>
-      <Text style={styles.subtitle}>Choose how you want to use Taskero.</Text>
-      <View style={styles.row}>
-        <Pressable
-          onPress={() => setRole("customer")}
-          style={[styles.card, role === "customer" && styles.cardSelected]}
-        >
-          <Text style={styles.cardTitle}>Hire Help</Text>
-          <Text style={styles.cardText}>Customer</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setRole("worker")}
-          style={[styles.card, role === "worker" && styles.cardSelected]}
-        >
-          <Text style={styles.cardTitle}>Find Work</Text>
-          <Text style={styles.cardText}>Worker</Text>
-        </Pressable>
-      </View>
-      <View style={styles.form}>
-        <TextInput
-          value={firstName}
-          onChangeText={setFirstName}
-          placeholder="First name"
-          style={styles.input}
-        />
-        <TextInput
-          value={lastName}
-          onChangeText={setLastName}
-          placeholder="Last name"
-          style={styles.input}
-        />
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          placeholder="Email address"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          style={styles.input}
-        />
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Pressable
-          onPress={handleSubmit}
-          style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
-          disabled={isLoading}
-        >
-          <Text style={styles.primaryButtonText}>
-            {isLoading ? "Creating..." : "Create account"}
+    <SafeAreaView style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.brandGreen} />
+      <View style={styles.hero}>
+        <View style={styles.heroContent}>
+          <View style={styles.iconCircle}>
+            <Text style={styles.heroIcon}>🧩</Text>
+          </View>
+          <Text style={styles.heroTitle}>Create your account</Text>
+          <Text style={styles.heroSubtitle}>
+            Choose how you'd like to use Taskero
           </Text>
-        </Pressable>
+        </View>
       </View>
-    </View>
+
+      <View style={styles.sheet}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <View style={styles.roleContainer}>
+            <Pressable
+              onPress={() => setRole("customer")}
+              style={[
+                styles.roleCard,
+                role === "customer" && styles.roleCardSelected,
+              ]}
+            >
+              {role === "customer" && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>✓</Text>
+                </View>
+              )}
+              <Text style={styles.roleEmoji}>🏠</Text>
+              <Text style={styles.roleTitle}>Hire Help</Text>
+              <Text style={styles.roleDesc}>Get things done</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setRole("worker")}
+              style={[
+                styles.roleCard,
+                role === "worker" && styles.roleCardSelected,
+              ]}
+            >
+              {role === "worker" && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>✓</Text>
+                </View>
+              )}
+              <Text style={styles.roleEmoji}>🛠️</Text>
+              <Text style={styles.roleTitle}>Find Work</Text>
+              <Text style={styles.roleDesc}>Earn money</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.form}>
+            <Input
+              label="First Name"
+              value={firstName}
+              onChangeText={setFirstName}
+              placeholder="Enter your first name"
+            />
+            <Input
+              label="Last Name"
+              value={lastName}
+              onChangeText={setLastName}
+              placeholder="Enter your last name"
+            />
+            <Input
+              label="Email Address"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="name@example.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+            <Pressable
+              onPress={handleSubmit}
+              style={[
+                styles.submitButton,
+                isLoading && styles.submitButtonDisabled,
+              ]}
+              disabled={isLoading}
+            >
+              <Text style={styles.submitButtonText}>
+                {isLoading ? "Setting up your account..." : "Continue"}
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    padding: 24,
-    backgroundColor: colors.background,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: colors.text,
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: colors.subtext,
-    marginBottom: 24,
-  },
-  row: {
-    flexDirection: "row",
-    gap: 16,
-    marginBottom: 24,
-  },
-  card: {
-    flex: 1,
-    borderRadius: 16,
-    backgroundColor: colors.card,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  cardSelected: {
-    borderColor: colors.brandGreen,
-    backgroundColor: "#ECFDF5",
-  },
-  form: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-    backgroundColor: "#FFFFFF",
-  },
-  error: {
-    color: colors.danger,
-    marginBottom: 12,
-  },
-  primaryButton: {
     backgroundColor: colors.brandGreen,
-    paddingVertical: 14,
-    borderRadius: 999,
+  },
+  hero: {
+    height: "30%",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  heroContent: {
     alignItems: "center",
   },
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 16,
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
   },
-  buttonDisabled: {
+  heroIcon: {
+    fontSize: 32,
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  heroSubtitle: {
+    fontSize: 16,
+    color: "rgba(255, 255, 255, 0.9)",
+    textAlign: "center",
+  },
+  sheet: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    marginTop: -24,
+  },
+  scrollContent: {
+    padding: 24,
+    paddingTop: 32,
+  },
+  roleContainer: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 32,
+  },
+  roleCard: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: colors.border,
+    position: "relative",
+  },
+  roleCardSelected: {
+    borderColor: colors.brandGreen,
+    backgroundColor: colors.brandGreenLight,
+  },
+  badge: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.brandGreen,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    zIndex: 1,
+  },
+  badgeText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  roleEmoji: {
+    fontSize: 24,
+    marginBottom: 12,
+  },
+  roleTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 4,
+  },
+  roleDesc: {
+    fontSize: 12,
+    color: colors.subtext,
+    lineHeight: 16,
+  },
+  form: {
+    gap: 4,
+  },
+  errorText: {
+    color: colors.danger,
+    fontSize: 14,
+    marginBottom: 16,
+    fontWeight: "500",
+  },
+  submitButton: {
+    backgroundColor: colors.brandGreen,
+    borderRadius: 999,
+    paddingVertical: 18,
+    alignItems: "center",
+    marginTop: 12,
+    shadowColor: colors.brandGreen,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  submitButtonDisabled: {
     opacity: 0.6,
   },
-  cardTitle: {
-    fontSize: 16,
+  submitButtonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
     fontWeight: "700",
-    marginBottom: 6,
-  },
-  cardText: {
-    fontSize: 14,
-    color: colors.subtext,
   },
 });
