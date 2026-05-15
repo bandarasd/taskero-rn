@@ -1,55 +1,24 @@
-import React, { useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useState, useRef } from "react";
+import { ScrollView, StyleSheet, Text, View, Pressable } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { createTask } from "../../services/taskService";
-import { Button } from "../../components/common/Button";
-import { BookingProgressBar } from "../../components/bookings/BookingProgressBar";
+import { useQuery } from "@tanstack/react-query";
+import { getGigById } from "../../services/gigService";
+import { BookingStepDots } from "../../components/booking/BookingStepDots";
+import { BookingToast, BookingToastHandle } from "../../components/booking/BookingToast";
+import { StickyPriceCTA } from "../../components/booking/StickyPriceCTA";
+import { Avatar } from "../../components/common/Avatar";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import { useAuth } from "../../store/authStore";
 import type { BookingFlowParamList } from "./BookingFlowNavigator";
+import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { format } from "date-fns";
 
 type RouteProps = RouteProp<BookingFlowParamList, "ReviewSummary">;
 type Nav = NativeStackNavigationProp<BookingFlowParamList>;
-
-function SectionCard({
-  icon,
-  title,
-  onEdit,
-  children,
-}: {
-  icon: string;
-  title: string;
-  onEdit?: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.cardHeaderLeft}>
-          <Text style={styles.cardIcon}>{icon}</Text>
-          <Text style={styles.cardTitle}>{title}</Text>
-        </View>
-        {onEdit && (
-          <Pressable onPress={onEdit} hitSlop={8}>
-            <Text style={styles.editLink}>Edit</Text>
-          </Pressable>
-        )}
-      </View>
-      <View style={styles.cardBody}>{children}</View>
-    </View>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  );
-}
 
 export function ReviewSummaryScreen() {
   const route = useRoute<RouteProps>();
@@ -60,11 +29,16 @@ export function ReviewSummaryScreen() {
   } = route.params;
   const { dbUserId } = useAuth();
   const [loading, setLoading] = useState(false);
+  const toastRef = useRef<BookingToastHandle>(null);
 
-  const fmtDate = (iso: string) =>
-    new Date(iso).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-  const fmtTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const { data: gig } = useQuery({
+    queryKey: ["gig", gigId],
+    queryFn: () => getGigById(gigId),
+  });
+
+  const workerName = gig?.tasker
+    ? `${gig.tasker.first_name ?? ""} ${gig.tasker.last_name ?? ""}`.trim()
+    : "Worker";
 
   const handleConfirm = async () => {
     if (!dbUserId) return;
@@ -86,143 +60,239 @@ export function ReviewSummaryScreen() {
       });
       navigation.navigate("PaymentSuccess", { taskId: task.id });
     } catch {
-      Alert.alert("Error", "Could not create booking. Please try again.");
+      toastRef.current?.show("Could not create booking. Please try again.", "error");
     } finally {
       setLoading(false);
     }
   };
 
   const detailEntries = Object.entries(details ?? {}).filter(([, v]) => String(v).trim().length > 0);
+  const formattedDate = format(new Date(scheduledAt), "EEE, d MMM");
+  const formattedTime = format(new Date(scheduledAt), "h:mm a");
+
+  const SummaryRow = ({ label, value, icon }: { label: string; value: string; icon?: string }) => (
+    <View style={styles.summaryRow}>
+      <View style={styles.summaryLabelWrap}>
+        {icon && <Ionicons name={icon as any} size={18} color={colors.subtext} style={styles.rowIcon} />}
+        <Text style={styles.summaryLabel}>{label}</Text>
+      </View>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
-      <BookingProgressBar currentStep={5} />
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Review Your Booking</Text>
-        <Text style={styles.sub}>Check the details below before confirming.</Text>
+      <SafeAreaView edges={["top"]} style={styles.header}>
+        <View style={styles.headerContent}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Review</Text>
+          <View style={{ width: 40 }} />
+        </View>
+      </SafeAreaView>
 
-        <SectionCard
-          icon="📅"
-          title="Schedule"
-          onEdit={() => navigation.goBack()}
-        >
-          <InfoRow label="Date" value={fmtDate(scheduledAt)} />
-          <InfoRow label="Time" value={fmtTime(scheduledAt)} />
-          <InfoRow label="Category" value={category} />
-        </SectionCard>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={styles.title}>Review your booking</Text>
 
-        <SectionCard icon="📍" title="Service Location">
-          <Text style={styles.addressText}>{address}</Text>
-        </SectionCard>
-
-        {detailEntries.length > 0 && (
-          <SectionCard icon="🛠️" title="Service Details">
-            {detailEntries.map(([k, v]) => (
-              <InfoRow
-                key={k}
-                label={k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                value={String(v)}
-              />
-            ))}
-          </SectionCard>
-        )}
-
-        {notes ? (
-          <SectionCard icon="📝" title="Notes">
-            <Text style={styles.notesText}>{notes}</Text>
-          </SectionCard>
-        ) : null}
-
-        {/* Price card */}
-        <View style={styles.priceCard}>
-          <View style={styles.priceCardTop}>
-            <Text style={styles.priceCardLabel}>Estimated Starting Price</Text>
-            <Text style={styles.priceCardAmount}>${basePrice}<Text style={styles.priceCardUnit}>/hr</Text></Text>
+        <View style={styles.workerSection}>
+          <Avatar uri={gig?.tasker?.avatar_url} name={workerName} size={50} />
+          <View style={styles.workerInfo}>
+            <Text style={styles.workerName}>{workerName}</Text>
+            <View style={styles.ratingRow}>
+              <Ionicons name="star" size={14} color={colors.warning} />
+              <Text style={styles.ratingText}>{gig?.rating?.toFixed(1) ?? "5.0"}</Text>
+            </View>
           </View>
-          <View style={styles.priceCardDivider} />
-          <Text style={styles.priceCardNote}>
-            Final price is confirmed by the worker after reviewing your job details. You'll only be charged once the service is complete.
-          </Text>
         </View>
 
-        {/* Booking terms */}
-        <Text style={styles.termsText}>
-          By confirming, you agree to Taskero's{" "}
-          <Text style={styles.termsLink}>Terms of Service</Text> and{" "}
-          <Text style={styles.termsLink}>Cancellation Policy</Text>.
-        </Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Service details</Text>
+          <SummaryRow label="Service" value={category} />
+          <SummaryRow label="Location" value={address} />
+          <SummaryRow label="Date & Time" value={`${formattedDate} at ${formattedTime}`} />
+          {detailEntries.map(([k, v]) => (
+            <SummaryRow
+              key={k}
+              label={k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+              value={String(v)}
+            />
+          ))}
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Pricing</Text>
+          <SummaryRow label="Base rate" value={`Rs. ${basePrice.toLocaleString()} / hr`} />
+          <View style={styles.amberNote}>
+            <Ionicons name="warning" size={16} color={colors.warning} />
+            <Text style={styles.amberNoteText}>Final price set after tasker reviews & quotes</Text>
+          </View>
+        </View>
+
+        {notes && (
+          <>
+            <View style={styles.divider} />
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Notes</Text>
+              <Text style={styles.notesText}>"{notes}"</Text>
+            </View>
+          </>
+        )}
+
+        <View style={styles.termsSection}>
+          <Text style={styles.termsText}>
+            By continuing you agree to Taskero's{"\n"}
+            <Text style={styles.termsLink}>Terms & Privacy Policy</Text>
+          </Text>
+        </View>
       </ScrollView>
 
-      <View style={styles.footer}>
-        <Button label="Confirm Booking" onPress={handleConfirm} loading={loading} />
-      </View>
+      <StickyPriceCTA
+        label="Place Booking"
+        price={basePrice.toLocaleString()}
+        onPress={handleConfirm}
+        loading={loading}
+      />
+      
+      <BookingToast ref={toastRef} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.lg, paddingBottom: 16 },
-  title: { fontSize: 22, fontWeight: "800", color: colors.text, marginBottom: 4 },
-  sub: { fontSize: 14, color: colors.subtext, marginBottom: 20 },
-
-  card: {
+  container: { flex: 1, backgroundColor: colors.card },
+  header: {
     backgroundColor: colors.card,
+    zIndex: 10,
+  },
+  headerContent: {
+    height: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.md,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  content: { padding: spacing.lg, paddingBottom: 120 },
+  title: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: colors.text,
+    marginBottom: spacing.xl,
+  },
+  workerSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.card,
+    padding: spacing.md,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 14,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
+    borderColor: colors.borderLight,
+    marginBottom: spacing.xl,
   },
-  cardHeader: {
+  workerInfo: {
+    marginLeft: spacing.md,
+  },
+  workerName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  ratingRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-    backgroundColor: colors.sectionHeader,
+    marginTop: 2,
   },
-  cardHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
-  cardIcon: { fontSize: 16 },
-  cardTitle: { fontSize: 13, fontWeight: "700", color: colors.text, textTransform: "uppercase", letterSpacing: 0.4 },
-  editLink: { fontSize: 13, fontWeight: "600", color: colors.brandGreen },
-  cardBody: { paddingHorizontal: 16, paddingVertical: 12 },
-
-  infoRow: {
+  ratingText: {
+    fontSize: 13,
+    color: colors.subtext,
+    marginLeft: 4,
+    fontWeight: "600",
+  },
+  section: {
+    marginBottom: spacing.md,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.subtext,
+    textTransform: "uppercase",
+    marginBottom: spacing.md,
+  },
+  summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 7,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
+    paddingVertical: spacing.sm,
   },
-  infoLabel: { fontSize: 14, color: colors.subtext },
-  infoValue: { fontSize: 14, fontWeight: "600", color: colors.text, maxWidth: "55%", textAlign: "right" },
-
-  addressText: { fontSize: 14, color: colors.text, lineHeight: 22 },
-  notesText: { fontSize: 14, color: colors.text, lineHeight: 22, fontStyle: "italic" },
-
-  priceCard: {
-    backgroundColor: colors.brandGreen,
-    borderRadius: radius.lg,
-    padding: 20,
-    marginBottom: 14,
+  summaryLabelWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
   },
-  priceCardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 14 },
-  priceCardLabel: { fontSize: 13, color: "rgba(255,255,255,0.8)", fontWeight: "600" },
-  priceCardAmount: { fontSize: 38, fontWeight: "800", color: "#fff" },
-  priceCardUnit: { fontSize: 16, fontWeight: "500", color: "rgba(255,255,255,0.8)" },
-  priceCardDivider: { height: 1, backgroundColor: "rgba(255,255,255,0.25)", marginBottom: 12 },
-  priceCardNote: { fontSize: 12, color: "rgba(255,255,255,0.85)", lineHeight: 18 },
-
-  termsText: { fontSize: 12, color: colors.subtext, textAlign: "center", lineHeight: 18, marginBottom: 8 },
-  termsLink: { color: colors.brandGreen, fontWeight: "600" },
-
-  footer: { padding: spacing.lg, paddingBottom: 36 },
+  rowIcon: {
+    marginRight: spacing.sm,
+  },
+  summaryLabel: {
+    fontSize: 15,
+    color: colors.subtext,
+  },
+  summaryValue: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text,
+    flex: 1,
+    textAlign: "right",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginVertical: spacing.md,
+  },
+  amberNote: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.warningLight,
+    padding: spacing.sm,
+    borderRadius: radius.sm,
+    marginTop: spacing.sm,
+  },
+  amberNoteText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.warning,
+    marginLeft: spacing.xs,
+  },
+  notesText: {
+    fontSize: 15,
+    color: colors.text,
+    fontStyle: "italic",
+    lineHeight: 22,
+  },
+  termsSection: {
+    marginTop: spacing.xl,
+    alignItems: "center",
+  },
+  termsText: {
+    fontSize: 13,
+    color: colors.subtext,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  termsLink: {
+    color: colors.brandGreen,
+    fontWeight: "600",
+  },
 });

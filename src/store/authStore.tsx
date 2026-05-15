@@ -144,7 +144,7 @@ async function lookupUserProfile(nextUser: User) {
     try {
       return await getUserByPhone(nextUser.phoneNumber);
     } catch {
-      return null;
+      // Phone lookup failed — fall through to UID lookup as a fallback.
     }
   }
 

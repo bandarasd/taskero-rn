@@ -36,9 +36,9 @@ export function BookingCard({ task, onPress }: Props) {
         </View>
         <Text style={styles.price}>
           {task.quoted_price != null
-            ? `$${task.quoted_price}`
+            ? `Rs. ${task.quoted_price}`
             : task.base_price != null
-            ? `$${task.base_price}`
+            ? `Rs. ${task.base_price}`
             : "—"}
         </Text>
       </View>

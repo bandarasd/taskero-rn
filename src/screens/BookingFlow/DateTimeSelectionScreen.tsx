@@ -5,24 +5,23 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
 import { getAvailableSlots } from "../../services/scheduleService";
 import { getGigById } from "../../services/gigService";
-import { Button } from "../../components/common/Button";
-import { LoadingSpinner } from "../../components/common/LoadingSpinner";
-import { BookingProgressBar } from "../../components/bookings/BookingProgressBar";
+import { BookingStepDots } from "../../components/booking/BookingStepDots";
+import { StickyPriceCTA } from "../../components/booking/StickyPriceCTA";
+import { DateChip } from "../../components/booking/DateChip";
+import { TimeSlotChip } from "../../components/booking/TimeSlotChip";
+import { SkeletonCard } from "../../components/booking/SkeletonCard";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import type { BookingFlowParamList } from "./BookingFlowNavigator";
+import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { format, addDays } from "date-fns";
 
 type RouteProps = RouteProp<BookingFlowParamList, "DateTimeSelection">;
 type Nav = NativeStackNavigationProp<BookingFlowParamList>;
 
 function isoDateString(date: Date) {
-  return date.toISOString().split("T")[0];
-}
-
-function addDays(d: Date, n: number) {
-  const result = new Date(d);
-  result.setDate(result.getDate() + n);
-  return result;
+  return format(date, "yyyy-MM-dd");
 }
 
 function formatSlot(slot: string) {
@@ -42,7 +41,7 @@ export function DateTimeSelectionScreen() {
   const { gigId, taskerId, address, latitude, longitude } = route.params;
 
   const today = new Date();
-  const days = Array.from({ length: 14 }, (_, i) => addDays(today, i + 1));
+  const days = Array.from({ length: 14 }, (_, i) => addDays(today, i));
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
@@ -72,206 +71,216 @@ export function DateTimeSelectionScreen() {
 
   return (
     <View style={styles.container}>
-      <BookingProgressBar currentStep={3} />
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>When do you need service?</Text>
+      <SafeAreaView edges={["top"]} style={styles.header}>
+        <View style={styles.headerContent}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </Pressable>
+          <BookingStepDots currentStep={3} />
+        </View>
+      </SafeAreaView>
 
-        {/* Date picker */}
-        <Text style={styles.sectionLabel}>Select a Date</Text>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={styles.title}>When do you need this?</Text>
+
+        <Text style={styles.sectionLabel}>Date</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.daysScroll}>
           {days.map((d) => {
-            const iso = isoDateString(d);
-            const isSelected = selectedDate ? isoDateString(selectedDate) === iso : false;
+            const isSelected = selectedDate && format(selectedDate, "yyyy-MM-dd") === format(d, "yyyy-MM-dd");
             return (
-              <Pressable
-                key={iso}
-                style={[styles.dayChip, isSelected && styles.dayChipSelected]}
-                onPress={() => { setSelectedDate(d); setSelectedSlot(null); }}
-              >
-                <Text style={[styles.dayWeekday, isSelected && styles.dayTextSelected]}>
-                  {d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()}
-                </Text>
-                <Text style={[styles.dayNum, isSelected && styles.dayTextSelected]}>
-                  {d.getDate()}
-                </Text>
-                <Text style={[styles.dayMonth, isSelected && styles.dayTextSelected]}>
-                  {d.toLocaleDateString("en-US", { month: "short" })}
-                </Text>
-              </Pressable>
+              <DateChip
+                key={format(d, "yyyy-MM-dd")}
+                date={d}
+                selected={!!isSelected}
+                onPress={() => {
+                  setSelectedDate(d);
+                  setSelectedSlot(null);
+                }}
+              />
             );
           })}
         </ScrollView>
 
-        {/* Time slots */}
         {selectedDate && (
           <View style={styles.slotsSection}>
-            <Text style={styles.sectionLabel}>
-              Available Times — {selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-            </Text>
+            <Text style={styles.sectionLabel}>Available times</Text>
+            
             {slotsLoading ? (
-              <LoadingSpinner style={{ height: 80 }} size="small" />
+              <View style={styles.slotsGrid}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <SkeletonCard key={i} variant="timeslot" />
+                ))}
+              </View>
             ) : slots.length === 0 ? (
-              <View style={styles.noSlotsCard}>
-                <Text style={styles.noSlotsIcon}>📅</Text>
-                <Text style={styles.noSlotsTitle}>No availability</Text>
-                <Text style={styles.noSlotsSub}>This worker has no open slots on this date. Try another day.</Text>
+              <View style={styles.emptyState}>
+                <Ionicons name="calendar-outline" size={48} color={colors.placeholder} />
+                <Text style={styles.emptyTitle}>No slots available</Text>
+                <Text style={styles.emptySub}>Try selecting another date for this tasker.</Text>
               </View>
             ) : (
               <>
                 {amSlots.length > 0 && (
-                  <>
+                  <View style={styles.periodSection}>
                     <Text style={styles.periodLabel}>Morning</Text>
                     <View style={styles.slotsGrid}>
                       {amSlots.map((slot) => (
-                        <SlotChip key={slot} slot={slot} selected={selectedSlot === slot} onPress={() => setSelectedSlot(slot)} />
+                        <TimeSlotChip
+                          key={slot}
+                          time={formatSlot(slot)}
+                          selected={selectedSlot === slot}
+                          onPress={() => setSelectedSlot(slot)}
+                        />
                       ))}
                     </View>
-                  </>
+                  </View>
                 )}
+
                 {pmSlots.length > 0 && (
-                  <>
+                  <View style={styles.periodSection}>
                     <Text style={styles.periodLabel}>Afternoon & Evening</Text>
                     <View style={styles.slotsGrid}>
                       {pmSlots.map((slot) => (
-                        <SlotChip key={slot} slot={slot} selected={selectedSlot === slot} onPress={() => setSelectedSlot(slot)} />
+                        <TimeSlotChip
+                          key={slot}
+                          time={formatSlot(slot)}
+                          selected={selectedSlot === slot}
+                          onPress={() => setSelectedSlot(slot)}
+                        />
                       ))}
                     </View>
-                  </>
+                  </View>
                 )}
               </>
             )}
           </View>
         )}
 
-        {!selectedDate && (
-          <View style={styles.promptCard}>
-            <Text style={styles.promptIcon}>👆</Text>
-            <Text style={styles.promptText}>Select a date above to see available time slots.</Text>
+        {selectedDate && selectedSlot && (
+          <View style={styles.selectionSummary}>
+            <Text style={styles.sectionLabel}>Your selection</Text>
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryItem}>
+                <Ionicons name="calendar" size={20} color={colors.brandGreen} />
+                <Text style={styles.summaryText}>{format(selectedDate, "EEEE, d MMMM")}</Text>
+              </View>
+              <View style={[styles.summaryItem, { marginTop: spacing.sm }]}>
+                <Ionicons name="time" size={20} color={colors.brandGreen} />
+                <Text style={styles.summaryText}>{formatSlot(selectedSlot)}</Text>
+              </View>
+            </View>
           </View>
         )}
       </ScrollView>
 
-      <View style={styles.footer}>
-        {selectedDate && selectedSlot && (
-          <View style={styles.selectionBadge}>
-            <Text style={styles.selectionBadgeText}>
-              📅 {selectedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {formatSlot(selectedSlot)}
-            </Text>
-          </View>
-        )}
-        <Button
-          label="Continue: Service Details"
-          disabled={!selectedDate || !selectedSlot}
-          onPress={() =>
-            navigation.navigate("ServiceSpecific", {
-              gigId,
-              taskerId,
-              address,
-              latitude,
-              longitude,
-              scheduledAt: buildScheduledAt(),
-              category: gig?.category ?? "General",
-            })
-          }
-        />
-      </View>
+      <StickyPriceCTA
+        label="Continue"
+        onPress={() =>
+          navigation.navigate("ServiceSpecific", {
+            gigId,
+            taskerId,
+            address,
+            latitude,
+            longitude,
+            scheduledAt: buildScheduledAt(),
+            category: gig?.category ?? "General",
+          })
+        }
+        disabled={!selectedDate || !selectedSlot}
+      />
     </View>
   );
 }
 
-function SlotChip({ slot, selected, onPress }: { slot: string; selected: boolean; onPress: () => void }) {
-  return (
-    <Pressable style={[styles.slotChip, selected && styles.slotChipSelected]} onPress={onPress}>
-      <Text style={[styles.slotText, selected && styles.slotTextSelected]}>{formatSlot(slot)}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.lg, paddingBottom: 16 },
-  title: { fontSize: 22, fontWeight: "800", color: colors.text, marginBottom: 20 },
-  sectionLabel: { fontSize: 13, fontWeight: "600", color: colors.subtext, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.4 },
-
-  daysScroll: { marginBottom: 28 },
-  dayChip: {
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: radius.md,
+  container: { flex: 1, backgroundColor: colors.card },
+  header: {
     backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: 8,
-    minWidth: 62,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    zIndex: 10,
   },
-  dayChipSelected: {
-    backgroundColor: colors.brandGreen,
-    borderColor: colors.brandGreen,
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  dayWeekday: { fontSize: 10, color: colors.subtext, fontWeight: "600", letterSpacing: 0.5, marginBottom: 4 },
-  dayNum: { fontSize: 22, fontWeight: "800", color: colors.text, lineHeight: 26 },
-  dayMonth: { fontSize: 10, color: colors.subtext, marginTop: 2 },
-  dayTextSelected: { color: "#fff" },
-
-  slotsSection: { marginBottom: 16 },
-  periodLabel: { fontSize: 12, fontWeight: "700", color: colors.subtext, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, marginTop: 4 },
-  slotsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 16 },
-  slotChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    minWidth: 96,
-    alignItems: "center",
-  },
-  slotChipSelected: { backgroundColor: colors.brandGreen, borderColor: colors.brandGreen },
-  slotText: { fontSize: 14, fontWeight: "600", color: colors.text },
-  slotTextSelected: { color: "#fff" },
-
-  noSlotsCard: {
-    alignItems: "center",
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 28,
-  },
-  noSlotsIcon: { fontSize: 32, marginBottom: 10 },
-  noSlotsTitle: { fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 6 },
-  noSlotsSub: { fontSize: 13, color: colors.subtext, textAlign: "center", lineHeight: 19 },
-
-  promptCard: {
+  headerContent: {
+    height: 56,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    gap: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.md,
   },
-  promptIcon: { fontSize: 20 },
-  promptText: { fontSize: 14, color: colors.subtext, flex: 1 },
-
-  footer: { padding: spacing.lg, paddingBottom: 36 },
-  selectionBadge: {
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  content: { padding: spacing.lg, paddingBottom: 120 },
+  title: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: colors.text,
+    marginBottom: spacing.lg,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.subtext,
+    textTransform: "uppercase",
+    marginBottom: spacing.md,
+  },
+  daysScroll: {
+    marginBottom: spacing.xl,
+    marginHorizontal: -spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  slotsSection: {
+    marginBottom: spacing.xl,
+  },
+  periodSection: {
+    marginBottom: spacing.md,
+  },
+  periodLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.subtext,
+    marginBottom: spacing.sm,
+  },
+  slotsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginHorizontal: -spacing.xs,
+  },
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: spacing.xl,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.text,
+    marginTop: spacing.md,
+  },
+  emptySub: {
+    fontSize: 14,
+    color: colors.subtext,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  selectionSummary: {
+    marginTop: spacing.sm,
+  },
+  summaryCard: {
     backgroundColor: colors.brandGreenLight,
-    borderRadius: radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginBottom: 10,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.brandGreen + "20",
+  },
+  summaryItem: {
+    flexDirection: "row",
     alignItems: "center",
   },
-  selectionBadgeText: { fontSize: 13, fontWeight: "600", color: colors.brandGreenDark },
+  summaryText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.text,
+    marginLeft: spacing.md,
+  },
 });

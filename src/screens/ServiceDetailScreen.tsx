@@ -7,7 +7,10 @@ import {
   Text,
   View,
   Alert,
+  StatusBar,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -39,10 +42,23 @@ export function ServiceDetailScreen() {
     queryFn: () => getGigById(gigId),
   });
 
+  const insets = useSafeAreaInsets();
   const { data: reviews } = useQuery({
     queryKey: ["reviews", "gig", gigId],
     queryFn: () => getGigReviews(gigId),
     enabled: !!gigId,
+  });
+
+  const avgRating = gig?.rating ?? 0;
+  const reviewCount = reviews?.length ?? 0;
+
+  // Star breakdown calculation
+  const ratingCounts = [0, 0, 0, 0, 0]; // 5, 4, 3, 2, 1
+  reviews?.forEach((r) => {
+    const star = Math.round(r.rating);
+    if (star >= 1 && star <= 5) {
+      ratingCounts[5 - star]++;
+    }
   });
 
   const workerName = gig?.tasker
@@ -64,13 +80,39 @@ export function ServiceDetailScreen() {
 
   if (isLoading || !gig) return <LoadingSpinner />;
 
-  const images = gig.attachments ?? [];
-  const previewReviews = (reviews ?? []).slice(0, 3);
+  const images = (gig.attachments ?? [])
+    .map((a) => (typeof a === "string" ? a : (a as { url?: string })?.url ?? ""))
+    .filter(Boolean);
+
+  const handleShare = () => {
+    Alert.alert("Share", "Sharing feature coming soon!");
+  };
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Image carousel */}
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      
+      {/* Floating Header Buttons */}
+      <View style={[styles.floatingHeader, { top: insets.top + 10 }]}>
+        <Pressable 
+          onPress={() => navigation.goBack()} 
+          style={styles.floatingButton}
+        >
+          <Ionicons name="arrow-back" size={24} color="white" />
+        </Pressable>
+        <Pressable 
+          onPress={handleShare} 
+          style={styles.floatingButton}
+        >
+          <Ionicons name="share-outline" size={24} color="white" />
+        </Pressable>
+      </View>
+
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.content, { paddingBottom: 100 + insets.bottom }]}
+      >
+        {/* Hero Image Section */}
         {images.length > 0 ? (
           <View>
             <Image source={{ uri: images[imageIdx] }} style={styles.heroImage} />
@@ -90,7 +132,10 @@ export function ServiceDetailScreen() {
           </View>
         )}
 
-        <View style={styles.body}>
+        {/* Content Sheet */}
+        <View style={styles.contentSheet}>
+          <View style={styles.dragIndicator} />
+
           {/* Category badge */}
           <View style={styles.categoryBadge}>
             <Text style={styles.categoryBadgeText}>{gig.category}</Text>
@@ -98,38 +143,43 @@ export function ServiceDetailScreen() {
 
           <Text style={styles.title}>{gig.title}</Text>
 
+          {/* Price */}
+          <View style={styles.priceRow}>
+            <Text style={styles.price}>
+              from Rs. {gig.base_price}
+            </Text>
+          </View>
+
           {/* Rating row */}
           <View style={styles.ratingRow}>
-            <StarRating value={gig.rating ?? 0} size={16} />
+            <StarRating value={gig.rating ?? 0} size={14} />
             <Text style={styles.ratingText}>
               {gig.rating?.toFixed(1) ?? "0.0"} ({gig.review_count ?? 0} reviews)
             </Text>
           </View>
 
-          {/* Price */}
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Starting from</Text>
-            <Text style={styles.price}>${gig.base_price}/hr</Text>
-          </View>
-
-          {/* Worker info */}
-          <View style={styles.workerCard}>
-            <Avatar uri={gig.tasker?.avatar_url} name={workerName} size={52} />
+          {/* Worker strip */}
+          <View style={styles.workerStrip}>
+            <Avatar uri={gig.tasker?.avatar_url} name={workerName} size={44} />
             <View style={{ marginLeft: 12, flex: 1 }}>
-              <Text style={styles.workerName}>{workerName}</Text>
-              {gig.tasker?.bio ? (
-                <Text style={styles.workerBio} numberOfLines={2}>{gig.tasker.bio}</Text>
-              ) : null}
-              <View style={styles.ratingRow}>
-                <StarRating value={gig.tasker?.rating ?? 0} size={13} />
-                <Text style={styles.workerRatingText}>
-                  {gig.tasker?.rating?.toFixed(1) ?? "—"} · {gig.tasker?.review_count ?? 0} reviews
-                </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View>
+                  <Text style={styles.workerName}>{workerName}</Text>
+                  <View style={styles.workerRatingRow}>
+                    <Ionicons name="star" size={12} color={colors.warning} />
+                    <Text style={styles.workerRatingText}>
+                      {gig.tasker?.rating?.toFixed(1) ?? "—"} ({gig.tasker?.review_count ?? 0})
+                    </Text>
+                  </View>
+                </View>
+                <Pressable style={styles.viewProfileBtn}>
+                   <Ionicons name="chevron-forward" size={20} color={colors.subtext} />
+                </Pressable>
               </View>
             </View>
           </View>
 
-          {/* Description */}
+          {/* About section */}
           {gig.description ? (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>About this service</Text>
@@ -137,53 +187,79 @@ export function ServiceDetailScreen() {
             </View>
           ) : null}
 
-          {/* Reviews preview */}
-          {previewReviews.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.reviewsHeader}>
-                <Text style={styles.sectionTitle}>Reviews</Text>
-                {(reviews?.length ?? 0) > 3 && (
-                  <Pressable onPress={() => navigation.navigate("GigReviews", { gigId })}>
-                    <Text style={styles.seeAll}>See all {reviews?.length}</Text>
-                  </Pressable>
-                )}
+          {/* Section Divider */}
+          <View style={styles.sectionSpacer} />
+
+          {/* Reviews Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Reviews</Text>
+            
+            {/* Reviews Summary */}
+            <View style={styles.reviewsSummaryRow}>
+              <View style={styles.avgRatingCol}>
+                <Text style={styles.bigRatingText}>{avgRating.toFixed(1)}</Text>
+                <StarRating value={avgRating} size={14} />
+                <Text style={styles.totalReviewsText}>{reviewCount} reviews</Text>
               </View>
-              {previewReviews.map((r) => (
+              
+              <View style={styles.starsBreakdown}>
+                {ratingCounts.map((count, idx) => {
+                  const starLevel = 5 - idx;
+                  const percentage = reviewCount > 0 ? (count / reviewCount) * 100 : 0;
+                  return (
+                    <View key={starLevel} style={styles.breakdownRow}>
+                      <Text style={styles.breakdownStarLabel}>{starLevel}</Text>
+                      <View style={styles.breakdownBarBg}>
+                        <View style={[styles.breakdownBarFill, { width: `${percentage}%` }]} />
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Review List */}
+            {reviews && reviews.length > 0 ? (
+              reviews.map((r) => (
                 <View key={r.id} style={styles.reviewCard}>
+                  <View style={styles.reviewAccentBar} />
                   <View style={styles.reviewHeader}>
-                    <Avatar
-                      uri={r.reviewer?.avatar_url}
-                      name={r.reviewer ? `${r.reviewer.first_name} ${r.reviewer.last_name}` : "User"}
-                      size={32}
-                    />
-                    <View style={{ marginLeft: 8 }}>
-                      <Text style={styles.reviewerName}>
-                        {r.reviewer?.first_name ?? "Anonymous"}
-                      </Text>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={styles.reviewerName}>
+                          {r.reviewer?.first_name ?? "Anonymous"}
+                        </Text>
+                        <Text style={styles.reviewDate}>
+                          {r.created_at ? new Date(r.created_at).toLocaleDateString() : ""}
+                        </Text>
+                      </View>
                       <StarRating value={r.rating} size={12} />
                     </View>
                   </View>
                   {r.body ? <Text style={styles.reviewBody}>{r.body}</Text> : null}
                 </View>
-              ))}
-            </View>
-          )}
+              ))
+            ) : (
+              <Text style={styles.noReviewsText}>No reviews yet for this service.</Text>
+            )}
+          </View>
         </View>
       </ScrollView>
 
-      {/* Bottom action buttons */}
-      <View style={styles.footer}>
-        <Button
-          label={threadLoading ? "Opening..." : "Message"}
-          onPress={handleMessage}
-          variant="outline"
-          style={{ flex: 1 }}
+      {/* Sticky Footer CTA */}
+      <View style={[styles.footer, { paddingBottom: Math.max(spacing.lg, insets.bottom) }]}>
+        <Pressable 
+          onPress={handleMessage} 
+          style={styles.messageGhostButton}
           disabled={threadLoading}
-        />
+        >
+          <Text style={{ fontSize: 24 }}>💬</Text>
+        </Pressable>
         <Button
           label="Book Now"
           onPress={() => navigation.navigate("BookingFlow", { gigId })}
-          style={{ flex: 1 }}
+          style={styles.bookNowButton}
+          textStyle={styles.bookNowButtonText}
         />
       </View>
     </View>
@@ -192,59 +268,155 @@ export function ServiceDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: 100 },
-  heroImage: { width: "100%", height: 260, resizeMode: "cover" },
+  floatingHeader: {
+    position: "absolute",
+    left: spacing.lg,
+    right: spacing.lg,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    zIndex: 10,
+  },
+  floatingButton: {
+    backgroundColor: "rgba(0,0,0,0.35)",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  content: { flexGrow: 1 },
+  heroImage: { width: "100%", height: 300, resizeMode: "cover" },
   heroPlaceholder: {
-    width: "100%", height: 260,
+    width: "100%", height: 300,
     backgroundColor: colors.borderLight,
     alignItems: "center", justifyContent: "center",
   },
-  imageDots: { position: "absolute", bottom: 12, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 },
+  imageDots: { position: "absolute", bottom: 40, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 },
   imageDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.5)" },
   imageDotActive: { backgroundColor: "#fff", width: 18 },
-  body: { padding: spacing.lg },
+  contentSheet: {
+    marginTop: -28,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    backgroundColor: colors.background,
+    paddingTop: 20,
+    paddingHorizontal: spacing.lg,
+    minHeight: 500,
+  },
+  dragIndicator: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
   categoryBadge: {
     backgroundColor: colors.brandGreenLight,
     paddingHorizontal: 10, paddingVertical: 4,
     borderRadius: radius.full,
     alignSelf: "flex-start",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   categoryBadgeText: { fontSize: 12, fontWeight: "600", color: colors.brandGreen },
-  title: { fontSize: 22, fontWeight: "700", color: colors.text, marginBottom: 10 },
-  ratingRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
-  ratingText: { fontSize: 13, color: colors.subtext },
-  priceRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 },
-  priceLabel: { fontSize: 13, color: colors.subtext },
-  price: { fontSize: 22, fontWeight: "700", color: colors.brandGreen },
-  workerCard: {
+  title: { fontSize: 24, fontWeight: "800", color: colors.text, marginBottom: 8 },
+  priceRow: { marginBottom: 12 },
+  price: { fontSize: 28, fontWeight: "800", color: colors.brandGreen },
+  priceSuffix: { fontSize: 16, fontWeight: "600", color: colors.subtext },
+  ratingRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 20 },
+  ratingText: { fontSize: 13, color: colors.subtext, fontWeight: "500" },
+  workerStrip: {
     flexDirection: "row",
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
+    alignItems: "center",
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderColor: colors.border,
-    padding: 16,
-    marginBottom: 20,
+    marginBottom: 24,
   },
-  workerName: { fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 2 },
-  workerBio: { fontSize: 12, color: colors.subtext, marginBottom: 4 },
-  workerRatingText: { fontSize: 12, color: colors.subtext },
-  section: { marginBottom: 20 },
+  workerName: { fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 1 },
+  workerRatingRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  workerRatingText: { fontSize: 13, color: colors.subtext, fontWeight: "500" },
+  viewProfileBtn: { padding: 4 },
+  section: { marginBottom: 24 },
   sectionTitle: { fontSize: 17, fontWeight: "700", color: colors.text, marginBottom: 12 },
-  description: { fontSize: 15, color: colors.text, lineHeight: 24 },
-  reviewsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  seeAll: { fontSize: 13, color: colors.brandGreen, fontWeight: "600" },
-  reviewCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 12,
-    marginBottom: 10,
+  description: { fontSize: 15, color: colors.text, lineHeight: 26 },
+  sectionSpacer: {
+    height: 8,
+    backgroundColor: colors.borderLight,
+    marginHorizontal: -spacing.lg,
+    marginBottom: 24,
   },
-  reviewHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
-  reviewerName: { fontSize: 13, fontWeight: "600", color: colors.text },
-  reviewBody: { fontSize: 14, color: colors.text, lineHeight: 20 },
+  reviewsSummaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 24,
+    gap: 24,
+  },
+  avgRatingCol: {
+    alignItems: "center",
+    width: 80,
+  },
+  bigRatingText: {
+    fontSize: 48,
+    fontWeight: "800",
+    color: colors.text,
+    lineHeight: 56,
+  },
+  totalReviewsText: {
+    fontSize: 12,
+    color: colors.subtext,
+    marginTop: 4,
+  },
+  starsBreakdown: {
+    flex: 1,
+  },
+  breakdownRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  breakdownStarLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.subtext,
+    width: 10,
+  },
+  breakdownBarBg: {
+    flex: 1,
+    height: 4,
+    backgroundColor: colors.borderLight,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  breakdownBarFill: {
+    height: "100%",
+    backgroundColor: colors.brandGreen,
+  },
+  reviewCard: {
+    position: "relative",
+    paddingVertical: 14,
+    paddingLeft: 14,
+    marginBottom: 4,
+  },
+  reviewAccentBar: {
+    position: "absolute",
+    left: 0,
+    top: 14,
+    bottom: 14,
+    width: 3,
+    backgroundColor: colors.brandGreen,
+    borderRadius: 2,
+  },
+  reviewHeader: {
+    flexDirection: "row",
+    marginBottom: 6,
+  },
+  reviewerName: { fontSize: 14, fontWeight: "700", color: colors.text },
+  reviewDate: { fontSize: 11, color: colors.subtext },
+  reviewBody: { fontSize: 14, color: colors.text, lineHeight: 22 },
+  noReviewsText: { fontSize: 14, color: colors.subtext, fontStyle: "italic" },
   footer: {
     position: "absolute",
     bottom: 0,
@@ -256,5 +428,25 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    alignItems: "center",
+  },
+  messageGhostButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bookNowButton: {
+    flex: 1,
+    height: 52,
+    backgroundColor: colors.brandGreen,
+    borderRadius: radius.xl,
+  },
+  bookNowButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

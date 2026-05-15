@@ -1,29 +1,42 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  Pressable,
+  Image,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
 import { getGigById } from "../../services/gigService";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { Input } from "../../components/common/Input";
-import { Button } from "../../components/common/Button";
-import { StarRating } from "../../components/gigs/StarRating";
-import { Avatar } from "../../components/common/Avatar";
-import { BookingProgressBar } from "../../components/bookings/BookingProgressBar";
+import { BookingStepDots } from "../../components/booking/BookingStepDots";
+import { StickyPriceCTA } from "../../components/booking/StickyPriceCTA";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import type { BookingFlowParamList } from "./BookingFlowNavigator";
+import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
+import * as ImagePicker from "expo-image-picker";
 
 type RouteProps = RouteProp<BookingFlowParamList, "GigBooking">;
 type Nav = NativeStackNavigationProp<BookingFlowParamList>;
 
 const MAX_NOTES = 300;
+const MAX_IMAGES = 4;
 
 export function GigBookingScreen() {
   const route = useRoute<RouteProps>();
   const navigation = useNavigation<Nav>();
   const { gigId } = route.params;
   const [notes, setNotes] = useState("");
+  const [images, setImages] = useState<string[]>([]);
+  const [pickingImage, setPickingImage] = useState(false);
 
   const { data: gig, isLoading } = useQuery({
     queryKey: ["gig", gigId],
@@ -32,118 +45,213 @@ export function GigBookingScreen() {
 
   if (isLoading || !gig) return <LoadingSpinner />;
 
-  const workerName = gig.tasker
-    ? `${gig.tasker.first_name ?? ""} ${gig.tasker.last_name ?? ""}`.trim()
-    : "Worker";
+  const pickImage = async () => {
+    if (images.length >= MAX_IMAGES) {
+      Alert.alert("Limit reached", `You can upload up to ${MAX_IMAGES} images.`);
+      return;
+    }
+    setPickingImage(true);
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission required", "Please allow access to your photo library.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        selectionLimit: MAX_IMAGES - images.length,
+        quality: 0.8,
+      });
+      if (!result.canceled) {
+        const uris = result.assets.map((a) => a.uri);
+        setImages((prev) => [...prev, ...uris].slice(0, MAX_IMAGES));
+      }
+    } finally {
+      setPickingImage(false);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  };
 
   return (
     <View style={styles.container}>
-      <BookingProgressBar currentStep={1} />
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Service card */}
-        <View style={styles.gigCard}>
-          <View style={styles.workerRow}>
-            <View style={styles.avatarRing}>
-              <Avatar uri={gig.tasker?.avatar_url} name={workerName} size={52} />
-            </View>
-            <View style={styles.workerInfo}>
-              <Text style={styles.gigTitle} numberOfLines={2}>{gig.title}</Text>
-              <Text style={styles.workerName}>{workerName}</Text>
-              <StarRating value={gig.rating ?? 0} size={13} style={{ marginTop: 4 }} />
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.priceRow}>
-            <View>
-              <Text style={styles.priceLabel}>Starting from</Text>
-              <Text style={styles.price}>${gig.base_price}<Text style={styles.priceUnit}>/hr</Text></Text>
-            </View>
-            <View style={styles.categoryPill}>
-              <Text style={styles.categoryPillText}>{gig.category ?? "Service"}</Text>
-            </View>
-          </View>
+      <SafeAreaView edges={["top"]} style={styles.header}>
+        <View style={styles.headerContent}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </Pressable>
+          <BookingStepDots currentStep={1} />
         </View>
+      </SafeAreaView>
 
-        {/* Notes section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Any special instructions?</Text>
-          <Text style={styles.sectionSub}>Help the worker prepare before they arrive.</Text>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.body}>
+          <Text style={styles.pageTitle}>Additional details</Text>
+          <Text style={styles.pageSubtitle}>Help the worker understand what you need</Text>
 
-          <Input
-            label="Notes for the worker (optional)"
-            value={notes}
-            onChangeText={(t) => setNotes(t.slice(0, MAX_NOTES))}
-            placeholder="e.g. Use the back entrance, dog is friendly, gate code is 1234..."
-            multiline
-            numberOfLines={4}
-            style={styles.notesInput}
-          />
-          <Text style={styles.charCount}>{notes.length}/{MAX_NOTES}</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionHeading}>Notes</Text>
+            <Input
+              value={notes}
+              onChangeText={(t) => setNotes(t.slice(0, MAX_NOTES))}
+              placeholder="e.g. Use the back entrance, dog is friendly, specific instructions..."
+              multiline
+              numberOfLines={4}
+              style={styles.notesInput}
+            />
+            <Text style={styles.charCount}>{notes.length}/{MAX_NOTES}</Text>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionHeading}>Photos</Text>
+              <Text style={styles.sectionHint}>{images.length}/{MAX_IMAGES}</Text>
+            </View>
+            <Text style={styles.sectionSubtext}>Add photos to help describe the job (optional)</Text>
+
+            <View style={styles.imagesGrid}>
+              {images.map((uri, index) => (
+                <View key={index} style={styles.imageThumbWrap}>
+                  <Image source={{ uri }} style={styles.imageThumb} />
+                  <Pressable style={styles.imageRemoveBtn} onPress={() => removeImage(index)}>
+                    <Ionicons name="close-circle" size={22} color={colors.danger} />
+                  </Pressable>
+                </View>
+              ))}
+              {images.length < MAX_IMAGES && (
+                <Pressable style={styles.addImageBtn} onPress={pickImage} disabled={pickingImage}>
+                  {pickingImage ? (
+                    <ActivityIndicator size="small" color={colors.brandGreen} />
+                  ) : (
+                    <>
+                      <Ionicons name="camera-outline" size={28} color={colors.brandGreen} />
+                      <Text style={styles.addImageText}>Add photo</Text>
+                    </>
+                  )}
+                </Pressable>
+              )}
+            </View>
+          </View>
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
-        <Button
-          label="Continue: Select Location"
-          onPress={() => navigation.navigate("LocationSelection", { gigId })}
-        />
-      </View>
+      <StickyPriceCTA
+        label="Continue"
+        price={gig.base_price.toLocaleString()}
+        onPress={() =>
+          navigation.navigate("LocationSelection", { gigId, notes, imageUris: images })
+        }
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.lg, paddingBottom: 16 },
-
-  gigCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 18,
-    marginBottom: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+  container: { flex: 1, backgroundColor: colors.card },
+  header: { backgroundColor: colors.card, zIndex: 10 },
+  headerContent: {
+    height: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.md,
   },
-  workerRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 16 },
-  avatarRing: {
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: colors.brandGreen,
-    padding: 2,
-    marginRight: 14,
-  },
-  workerInfo: { flex: 1 },
-  gigTitle: { fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 2, lineHeight: 22 },
-  workerName: { fontSize: 13, color: colors.subtext, marginBottom: 2 },
-
-  divider: { height: 1, backgroundColor: colors.borderLight, marginBottom: 14 },
-
-  priceRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" },
-  priceLabel: { fontSize: 11, color: colors.subtext, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 2 },
-  price: { fontSize: 26, fontWeight: "800", color: colors.brandGreen },
-  priceUnit: { fontSize: 14, fontWeight: "500", color: colors.subtext },
-  categoryPill: {
-    backgroundColor: colors.brandGreenLight,
+  backButton: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: colors.brandGreen + "40",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  categoryPillText: { fontSize: 12, fontWeight: "600", color: colors.brandGreenDark },
-
-  section: { marginBottom: 16 },
-  sectionTitle: { fontSize: 18, fontWeight: "700", color: colors.text, marginBottom: 4 },
-  sectionSub: { fontSize: 13, color: colors.subtext, marginBottom: 16 },
-  notesInput: { height: 110, textAlignVertical: "top", paddingTop: 12 },
-  charCount: { fontSize: 11, color: colors.placeholder, textAlign: "right", marginTop: 4 },
-
-  footer: { padding: spacing.lg, paddingBottom: 36 },
+  content: { paddingBottom: 120 },
+  body: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
+  pageTitle: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: colors.text,
+    marginBottom: 6,
+  },
+  pageSubtitle: {
+    fontSize: 15,
+    color: colors.subtext,
+    marginBottom: spacing.xl,
+  },
+  section: { marginBottom: spacing.xl },
+  sectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  sectionHeading: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  sectionHint: {
+    fontSize: 13,
+    color: colors.subtext,
+    fontWeight: "500",
+  },
+  sectionSubtext: {
+    fontSize: 13,
+    color: colors.subtext,
+    marginBottom: spacing.md,
+  },
+  notesInput: {
+    minHeight: 100,
+    textAlignVertical: "top",
+  },
+  charCount: {
+    fontSize: 11,
+    color: colors.placeholder,
+    textAlign: "right",
+    marginTop: 4,
+  },
+  imagesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  imageThumbWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: radius.md,
+    overflow: "visible",
+    position: "relative",
+  },
+  imageThumb: {
+    width: 88,
+    height: 88,
+    borderRadius: radius.md,
+    backgroundColor: colors.borderLight,
+  },
+  imageRemoveBtn: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+    backgroundColor: colors.card,
+    borderRadius: 11,
+  },
+  addImageBtn: {
+    width: 88,
+    height: 88,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.brandGreen,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    backgroundColor: colors.brandGreenLight,
+  },
+  addImageText: {
+    fontSize: 12,
+    color: colors.brandGreen,
+    fontWeight: "600",
+  },
 });

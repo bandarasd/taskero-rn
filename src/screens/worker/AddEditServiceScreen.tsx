@@ -88,7 +88,7 @@ export function AddEditServiceScreen() {
           numberOfLines={4}
           style={{ height: 100, textAlignVertical: "top", paddingTop: 12 }}
         />
-        <Input label="Base Price ($/hr)" value={basePrice} onChangeText={setBasePrice} placeholder="e.g. 45" keyboardType="decimal-pad" />
+        <Input label="Starting Price (Rs.)" value={basePrice} onChangeText={setBasePrice} placeholder="e.g. 45" keyboardType="decimal-pad" />
 
         <Text style={styles.categoryLabel}>Category</Text>
         <View style={styles.categoryGrid}>

@@ -116,8 +116,8 @@ export function WorkerServicesScreen() {
             >
               <View style={styles.imageContainer}>
                 {gig.attachments?.[0] ? (
-                  <Image 
-                    source={{ uri: gig.attachments[0] }} 
+                  <Image
+                    source={{ uri: typeof gig.attachments[0] === "string" ? gig.attachments[0] : (gig.attachments[0] as { url?: string })?.url ?? "" }}
                     style={styles.gigImage}
                   />
                 ) : (
@@ -135,8 +135,7 @@ export function WorkerServicesScreen() {
                 </View>
 
                 <View style={styles.priceContainer}>
-                  <Text style={styles.gigPrice}>${gig.base_price}</Text>
-                  <Text style={styles.priceUnit}>/hr</Text>
+                  <Text style={styles.gigPrice}>from Rs. {gig.base_price}</Text>
                 </View>
 
                 <View style={styles.infoRow}>

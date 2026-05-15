@@ -1,10 +1,12 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+import { Animated, StyleSheet, Text, View, Pressable } from "react-native";
 import { useNavigation, useRoute, RouteProp, CommonActions } from "@react-navigation/native";
 import { Button } from "../../components/common/Button";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import type { BookingFlowParamList } from "./BookingFlowNavigator";
+import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type RouteProps = RouteProp<BookingFlowParamList, "PaymentSuccess">;
 
@@ -15,7 +17,7 @@ export function PaymentSuccessScreen() {
 
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const checkAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(100)).current;
 
   useEffect(() => {
     Animated.sequence([
@@ -25,16 +27,19 @@ export function PaymentSuccessScreen() {
         friction: 7,
         useNativeDriver: true,
       }),
-      Animated.timing(checkAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 50,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]),
     ]).start();
   }, []);
 
@@ -47,125 +52,232 @@ export function PaymentSuccessScreen() {
     );
   };
 
+  const goToHome = () => {
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: "HomeTab" }],
+      })
+    );
+  };
+
   return (
-    <View style={styles.container}>
-      <View style={styles.inner}>
-        {/* Animated checkmark circle */}
-        <Animated.View style={[styles.checkCircleOuter, { transform: [{ scale: scaleAnim }] }]}>
-          <View style={styles.checkCircleInner}>
-            <Animated.Text style={[styles.checkmark, { opacity: checkAnim }]}>✓</Animated.Text>
-          </View>
-        </Animated.View>
-
-        <Animated.View style={{ opacity: fadeAnim, alignItems: "center" }}>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Animated.View style={[styles.checkCircle, { transform: [{ scale: scaleAnim }] }]}>
+            <Ionicons name="checkmark" size={50} color="#FFFFFF" />
+          </Animated.View>
           <Text style={styles.title}>Booking Confirmed!</Text>
-          <Text style={styles.sub}>
-            Your booking request has been sent. You'll receive a notification once the worker accepts.
+          <Text style={styles.subtitle}>
+            Your tasker will review and send{"\n"}a quote shortly
           </Text>
+        </View>
 
-          {/* Booking ID badge */}
-          <View style={styles.refCard}>
-            <Text style={styles.refLabel}>Booking Reference</Text>
-            <Text style={styles.ref}>{bookingRef}</Text>
-            <Text style={styles.refHint}>Keep this for your records</Text>
+        <Animated.View style={[styles.receiptCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          <View style={styles.receiptHeader}>
+            <Text style={styles.receiptId}>Booking #{bookingRef}</Text>
           </View>
-
-          {/* What's next */}
-          <View style={styles.nextCard}>
-            <Text style={styles.nextTitle}>What happens next?</Text>
-            {[
-              { icon: "🔔", text: "Worker reviews and accepts your booking" },
-              { icon: "💬", text: "Chat with them to confirm any details" },
-              { icon: "✅", text: "Service is completed and you pay" },
-            ].map((item, i) => (
-              <View key={i} style={styles.nextRow}>
-                <Text style={styles.nextIcon}>{item.icon}</Text>
-                <Text style={styles.nextText}>{item.text}</Text>
-              </View>
-            ))}
+          <View style={styles.receiptDivider} />
+          <View style={styles.receiptBody}>
+            <View style={styles.receiptRow}>
+              <Ionicons name="calendar-outline" size={18} color={colors.subtext} />
+              <Text style={styles.receiptValue}>Scheduled for Wed, 17 May</Text>
+            </View>
+            <View style={[styles.receiptRow, { marginTop: spacing.sm }]}>
+              <Ionicons name="location-outline" size={18} color={colors.subtext} />
+              <Text style={styles.receiptValue} numberOfLines={1}>123 Galle Road, Colombo</Text>
+            </View>
+            <View style={[styles.receiptRow, { marginTop: spacing.sm }]}>
+              <Ionicons name="time-outline" size={18} color={colors.subtext} />
+              <Text style={styles.receiptValue}>2:00 PM</Text>
+            </View>
           </View>
-
-          <Button label="View My Bookings" onPress={goToBookings} style={styles.cta} />
         </Animated.View>
+
+        <View style={styles.timelineSection}>
+          <Text style={styles.sectionTitle}>What's next?</Text>
+          <View style={styles.timeline}>
+            <TimelineItem
+              icon="document-text"
+              title="Tasker reviews & quotes"
+              description="They'll check your details and send a price."
+              isFirst
+            />
+            <TimelineItem
+              icon="card"
+              title="Accept quote & pay"
+              description="Securely pay through the app once you agree."
+            />
+            <TimelineItem
+              icon="checkmark-done"
+              title="Service completed"
+              description="Enjoy your professional service!"
+              isLast
+            />
+          </View>
+        </View>
+
+        <View style={styles.footer}>
+          <Button label="View My Bookings" onPress={goToBookings} style={styles.primaryButton} />
+          <Button label="Back to Home" onPress={goToHome} variant="ghost" style={styles.ghostButton} />
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function TimelineItem({ icon, title, description, isFirst, isLast }: any) {
+  return (
+    <View style={styles.timelineItem}>
+      <View style={styles.timelineLeft}>
+        <View style={[styles.timelineDot, { backgroundColor: isFirst ? colors.brandGreen : colors.border }]} />
+        {!isLast && <View style={styles.timelineLine} />}
+      </View>
+      <View style={styles.timelineRight}>
+        <Text style={styles.timelineTitle}>{title}</Text>
+        <Text style={styles.timelineDesc}>{description}</Text>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  inner: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.lg,
-  },
+import { ScrollView } from "react-native";
 
-  checkCircleOuter: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.brandGreenLight,
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.card },
+  content: { padding: spacing.lg, alignItems: "center" },
+  header: {
     alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 28,
-    borderWidth: 3,
-    borderColor: colors.brandGreen + "40",
+    marginTop: 40,
+    marginBottom: 32,
   },
-  checkCircleInner: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+  checkCircle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     backgroundColor: colors.brandGreen,
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: spacing.lg,
+    shadowColor: colors.brandGreen,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 10,
   },
-  checkmark: {
-    fontSize: 38,
-    color: "#fff",
-    fontWeight: "700",
-    lineHeight: 44,
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: colors.text,
+    textAlign: "center",
   },
-
-  title: { fontSize: 28, fontWeight: "800", color: colors.text, marginBottom: 10, textAlign: "center" },
-  sub: { fontSize: 15, color: colors.subtext, textAlign: "center", lineHeight: 23, marginBottom: 28, paddingHorizontal: 8 },
-
-  refCard: {
+  subtitle: {
+    fontSize: 16,
+    color: colors.subtext,
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 24,
+  },
+  receiptCard: {
+    width: "100%",
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 18,
-    paddingHorizontal: 28,
-    alignItems: "center",
-    marginBottom: 16,
-    width: "100%",
+    borderColor: colors.borderLight,
+    padding: spacing.md,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowRadius: 10,
+    elevation: 3,
+    marginBottom: 32,
   },
-  refLabel: { fontSize: 11, color: colors.subtext, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 },
-  ref: { fontSize: 28, fontWeight: "800", color: colors.brandGreen, letterSpacing: 3, marginBottom: 4 },
-  refHint: { fontSize: 11, color: colors.placeholder },
-
-  nextCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 18,
+  receiptHeader: {
+    paddingBottom: spacing.sm,
+  },
+  receiptId: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.subtext,
+    textTransform: "uppercase",
+  },
+  receiptDivider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    borderStyle: "dashed",
+    marginVertical: spacing.sm,
+  },
+  receiptBody: {
+    paddingTop: spacing.xs,
+  },
+  receiptRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  receiptValue: {
+    fontSize: 15,
+    color: colors.text,
+    marginLeft: spacing.sm,
+    fontWeight: "500",
+  },
+  timelineSection: {
     width: "100%",
-    marginBottom: 24,
+    marginBottom: 40,
   },
-  nextTitle: { fontSize: 13, fontWeight: "700", color: colors.subtext, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 14 },
-  nextRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },
-  nextIcon: { fontSize: 18, width: 26, textAlign: "center" },
-  nextText: { fontSize: 14, color: colors.text, flex: 1, lineHeight: 20 },
-
-  cta: { width: "100%" },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.subtext,
+    textTransform: "uppercase",
+    marginBottom: spacing.lg,
+  },
+  timeline: {
+    paddingLeft: 8,
+  },
+  timelineItem: {
+    flexDirection: "row",
+    minHeight: 60,
+  },
+  timelineLeft: {
+    alignItems: "center",
+    width: 20,
+  },
+  timelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    zIndex: 1,
+  },
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: colors.borderLight,
+    marginVertical: 4,
+  },
+  timelineRight: {
+    flex: 1,
+    marginLeft: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
+  timelineTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  timelineDesc: {
+    fontSize: 14,
+    color: colors.subtext,
+    marginTop: 2,
+  },
+  footer: {
+    width: "100%",
+    paddingBottom: 20,
+  },
+  primaryButton: {
+    marginBottom: spacing.sm,
+  },
+  ghostButton: {
+    alignSelf: "center",
+  },
 });

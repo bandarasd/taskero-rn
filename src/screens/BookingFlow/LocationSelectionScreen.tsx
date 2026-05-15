@@ -1,164 +1,362 @@
-import React, { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  StyleSheet,
+  Text,
+  View,
+  Pressable,
+  ActivityIndicator,
+} from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
 import { getGigById } from "../../services/gigService";
 import { GooglePlacesAutocomplete } from "react-native-google-places-autocomplete";
-import { Button } from "../../components/common/Button";
-import { BookingProgressBar } from "../../components/bookings/BookingProgressBar";
+import MapView, { Region, PROVIDER_GOOGLE } from "react-native-maps";
+import * as Location from "expo-location";
+import { BookingStepDots } from "../../components/booking/BookingStepDots";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import { env } from "../../services/env";
 import type { BookingFlowParamList } from "./BookingFlowNavigator";
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type RouteProps = RouteProp<BookingFlowParamList, "LocationSelection">;
 type Nav = NativeStackNavigationProp<BookingFlowParamList>;
 
+const RECENT_LOCATIONS_KEY = "recent_locations";
+const DEFAULT_LAT = 6.9271;
+const DEFAULT_LNG = 79.8612;
+
 export function LocationSelectionScreen() {
   const route = useRoute<RouteProps>();
   const navigation = useNavigation<Nav>();
-  const { gigId } = route.params;
+  const { gigId, notes, imageUris } = route.params;
+
   const [address, setAddress] = useState("");
-  const [lat, setLat] = useState<number | undefined>();
-  const [lng, setLng] = useState<number | undefined>();
+  const [mapRegion, setMapRegion] = useState<Region>({
+    latitude: DEFAULT_LAT,
+    longitude: DEFAULT_LNG,
+    latitudeDelta: 0.01,
+    longitudeDelta: 0.01,
+  });
+  const [reverseGeocoding, setReverseGeocoding] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const mapRef = useRef<MapView>(null);
+  const userDraggedRef = useRef(false);
+  const placesRef = useRef<any>(null);
 
   const { data: gig } = useQuery({
     queryKey: ["gig", gigId],
     queryFn: () => getGigById(gigId),
   });
 
-  const canContinue = address.length > 0;
+  const reverseGeocode = useCallback(async (lat: number, lng: number) => {
+    if (!env.googlePlacesApiKey) return;
+    setReverseGeocoding(true);
+    try {
+      const res = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${env.googlePlacesApiKey}`
+      );
+      const json = await res.json();
+      const addr: string =
+        json.results?.[0]?.formatted_address ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      setAddress(addr);
+    } catch {
+      setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+    } finally {
+      setReverseGeocoding(false);
+    }
+  }, []);
+
+  const goToMyLocation = useCallback(async () => {
+    setLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const region: Region = {
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      };
+      mapRef.current?.animateToRegion(region, 600);
+      setMapRegion(region);
+      void reverseGeocode(loc.coords.latitude, loc.coords.longitude);
+    } catch {}
+    finally {
+      setLocating(false);
+    }
+  }, [reverseGeocode]);
+
+  const saveRecentLocation = async (loc: { address: string; lat: number; lng: number }) => {
+    try {
+      const stored = await AsyncStorage.getItem(RECENT_LOCATIONS_KEY);
+      const existing = stored ? JSON.parse(stored) : [];
+      const filtered = existing.filter((l: any) => l.address !== loc.address).slice(0, 2);
+      await AsyncStorage.setItem(
+        RECENT_LOCATIONS_KEY,
+        JSON.stringify([loc, ...filtered])
+      );
+    } catch {}
+  };
+
+  const handleContinue = () => {
+    saveRecentLocation({ address, lat: mapRegion.latitude, lng: mapRegion.longitude });
+    navigation.navigate("DateTimeSelection", {
+      gigId,
+      taskerId: gig?.tasker_id ?? "",
+      address,
+      latitude: mapRegion.latitude,
+      longitude: mapRegion.longitude,
+    });
+  };
 
   return (
     <View style={styles.container}>
-      <BookingProgressBar currentStep={2} />
+      <SafeAreaView edges={["top"]} style={styles.header}>
+        <View style={styles.headerContent}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </Pressable>
+          <BookingStepDots currentStep={2} />
+        </View>
+      </SafeAreaView>
 
-      <View style={styles.content}>
-        <Text style={styles.title}>Where do you need service?</Text>
-        <Text style={styles.sub}>Enter the address where the work should be done.</Text>
-
+      {/* Search bar */}
+      <View style={styles.searchWrap}>
         <GooglePlacesAutocomplete
-          placeholder="🔍  Search address..."
-          onPress={(data, details) => {
-            setAddress(data.description);
-            if (details?.geometry?.location) {
-              setLat(details.geometry.location.lat);
-              setLng(details.geometry.location.lng);
+          ref={placesRef}
+          placeholder="Search address..."
+          onPress={async (data) => {
+            const addr = data.description ?? data.structured_formatting?.main_text ?? "";
+            setAddress(addr);
+            if (env.googlePlacesApiKey) {
+              try {
+                const res = await fetch(
+                  `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addr)}&key=${env.googlePlacesApiKey}`
+                );
+                const json = await res.json();
+                const loc = json.results?.[0]?.geometry?.location;
+                if (loc) {
+                  const newRegion: Region = {
+                    latitude: loc.lat,
+                    longitude: loc.lng,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  };
+                  setMapRegion(newRegion);
+                  mapRef.current?.animateToRegion(newRegion, 600);
+                }
+              } catch {}
             }
           }}
-          query={{
-            key: env.googlePlacesApiKey,
-            language: "en",
-          }}
-          fetchDetails
+          query={{ key: env.googlePlacesApiKey, language: "en" }}
+          fetchDetails={false}
+          enablePoweredByContainer={false}
+          minLength={2}
+          renderRow={(data) => (
+            <View style={styles.placeRow} pointerEvents="none">
+              <View style={styles.placeIconWrap}>
+                <Ionicons name="location" size={18} color={colors.brandGreen} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.placeMain} numberOfLines={1}>
+                  {data.structured_formatting?.main_text ?? data.description}
+                </Text>
+                <Text style={styles.placeSub} numberOfLines={1}>
+                  {data.structured_formatting?.secondary_text ?? ""}
+                </Text>
+              </View>
+            </View>
+          )}
           styles={{
-            textInput: styles.searchInput,
-            container: styles.autocompleteContainer,
-            listView: styles.listView,
+            container: styles.placesContainer,
+            textInputContainer: styles.placesInputContainer,
+            textInput: styles.placesInput,
+            listView: styles.placesListView,
+            separator: { height: 1, backgroundColor: "#F3F4F6" },
+            row: { backgroundColor: "#FFFFFF", padding: 0 },
+            description: { color: colors.text },
           }}
         />
-
-        {address ? (
-          <View style={styles.confirmedCard}>
-            <View style={styles.confirmedIconWrap}>
-              <Text style={styles.confirmedIcon}>📍</Text>
-            </View>
-            <View style={styles.confirmedText}>
-              <Text style={styles.confirmedLabel}>Service address</Text>
-              <Text style={styles.confirmedAddress}>{address}</Text>
-            </View>
-            <Text style={styles.confirmedCheck}>✓</Text>
-          </View>
-        ) : null}
-
-        <View style={styles.hintCard}>
-          <Text style={styles.hintIcon}>💡</Text>
-          <Text style={styles.hintText}>Make sure the address is accessible on the day of service. You can add gate codes or instructions in the notes.</Text>
-        </View>
       </View>
 
-      <View style={styles.footer}>
-        <Button
-          label="Continue: Choose Date & Time"
-          onPress={() =>
-            navigation.navigate("DateTimeSelection", {
-              gigId,
-              taskerId: gig?.tasker_id ?? "",
-              address,
-              latitude: lat,
-              longitude: lng,
-            })
-          }
-          disabled={!canContinue}
+      {/* Map */}
+      <View style={styles.mapContainer}>
+        <MapView
+          ref={mapRef}
+          provider={PROVIDER_GOOGLE}
+          style={StyleSheet.absoluteFillObject}
+          region={mapRegion}
+          onPanDrag={() => { userDraggedRef.current = true; }}
+          onRegionChangeComplete={(region) => {
+            setMapRegion(region);
+            if (!userDraggedRef.current) return;
+            userDraggedRef.current = false;
+            void reverseGeocode(region.latitude, region.longitude);
+          }}
         />
+
+        {/* Fixed centre pin */}
+        <View style={styles.fixedPinWrap} pointerEvents="none">
+          <Ionicons name="location" size={44} color={colors.brandGreen} style={{ marginBottom: -4 }} />
+          <View style={styles.fixedPinShadow} />
+        </View>
+
+        {/* My location button */}
+        <Pressable style={styles.myLocationBtn} onPress={goToMyLocation}>
+          {locating ? (
+            <ActivityIndicator size="small" color={colors.brandGreen} />
+          ) : (
+            <Ionicons name="navigate" size={22} color={colors.brandGreen} />
+          )}
+        </Pressable>
+      </View>
+
+      {/* Confirm bar */}
+      <View style={styles.confirmBar}>
+        <View style={{ flex: 1 }}>
+          {reverseGeocoding ? (
+            <ActivityIndicator size="small" color={colors.brandGreen} />
+          ) : (
+            <Text style={styles.confirmAddress} numberOfLines={2}>
+              {address || "Move the map or search to pick a location"}
+            </Text>
+          )}
+        </View>
+        <Pressable
+          style={[styles.confirmBtn, !address && styles.confirmBtnDisabled]}
+          onPress={handleContinue}
+          disabled={!address}
+        >
+          <Text style={styles.confirmBtnText}>Continue</Text>
+        </Pressable>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { flex: 1, padding: spacing.lg },
-  title: { fontSize: 22, fontWeight: "800", color: colors.text, marginBottom: 6 },
-  sub: { fontSize: 14, color: colors.subtext, marginBottom: 20, lineHeight: 20 },
-
-  autocompleteContainer: { zIndex: 999, marginBottom: 16 },
-  searchInput: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    fontSize: 15,
-    paddingHorizontal: 14,
-    backgroundColor: colors.card,
-    color: colors.text,
-    height: 48,
-  },
-  listView: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
-    marginTop: 4,
-  },
-  listRow: { paddingVertical: 12, paddingHorizontal: 14 },
-  listDescription: { fontSize: 14, color: colors.text },
-
-  confirmedCard: {
+  container: { flex: 1, backgroundColor: colors.card },
+  header: { backgroundColor: colors.card, zIndex: 10 },
+  headerContent: {
+    height: 56,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.brandGreenLight,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: colors.brandGreen,
-    padding: 14,
-    marginBottom: 16,
-    gap: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.md,
   },
-  confirmedIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.brandGreen + "20",
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },
-  confirmedIcon: { fontSize: 18 },
-  confirmedText: { flex: 1 },
-  confirmedLabel: { fontSize: 11, fontWeight: "600", color: colors.brandGreenDark, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 2 },
-  confirmedAddress: { fontSize: 14, color: colors.text, lineHeight: 20 },
-  confirmedCheck: { fontSize: 18, color: colors.brandGreen, fontWeight: "700" },
 
-  hintCard: {
-    flexDirection: "row",
-    backgroundColor: colors.infoLight,
-    borderRadius: radius.md,
-    padding: 14,
-    gap: 10,
-    alignItems: "flex-start",
+  searchWrap: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.card,
+    zIndex: 100,
   },
-  hintIcon: { fontSize: 16, marginTop: 1 },
-  hintText: { flex: 1, fontSize: 13, color: colors.info, lineHeight: 19 },
+  placesContainer: { flex: 0 },
+  placesInputContainer: { backgroundColor: "transparent", borderTopWidth: 0, borderBottomWidth: 0 },
+  placesInput: {
+    backgroundColor: "#F3F4F6",
+    borderRadius: 12,
+    fontSize: 15,
+    color: colors.text,
+    paddingLeft: 12,
+  },
+  placesListView: {
+    position: "absolute",
+    top: 50,
+    left: 0,
+    right: 0,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    maxHeight: 220,
+  },
+  placeRow: { flexDirection: "row", alignItems: "center", padding: 12, gap: 12 },
+  placeIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#DCFCE7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  placeMain: { fontSize: 15, color: colors.text, fontWeight: "600" },
+  placeSub: { fontSize: 13, color: colors.subtext },
 
-  footer: { padding: spacing.lg, paddingBottom: 36 },
+  mapContainer: { flex: 1, position: "relative" },
+
+  fixedPinWrap: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    marginTop: -40,
+    marginLeft: -22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fixedPinShadow: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(0,0,0,0.2)",
+    marginTop: 2,
+  },
+
+  myLocationBtn: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+
+  confirmBar: {
+    padding: spacing.lg,
+    backgroundColor: "#FFFFFF",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  confirmAddress: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: "500",
+    lineHeight: 20,
+  },
+  confirmBtn: {
+    backgroundColor: colors.brandGreen,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  confirmBtnDisabled: { backgroundColor: "#9CA3AF" },
+  confirmBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
 });

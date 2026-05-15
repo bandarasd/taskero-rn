@@ -14,25 +14,44 @@ export function GigCard({ gig, onPress }: Props) {
   const workerName = gig.tasker
     ? `${gig.tasker.first_name ?? ""} ${gig.tasker.last_name ?? ""}`.trim()
     : "Worker";
-  const image = gig.attachments?.[0];
+  
+  const avatarUrl = gig.tasker?.avatar_url;
+  const initial = gig.tasker?.first_name ? gig.tasker.first_name[0].toUpperCase() : "W";
+
+  const raw = gig.attachments?.[0];
+  const image = typeof raw === "string" ? raw : (raw as { url?: string })?.url ?? null;
 
   return (
     <Pressable style={styles.card} onPress={onPress}>
-      {image ? (
-        <Image source={{ uri: image }} style={styles.image} />
-      ) : (
-        <View style={styles.imagePlaceholder}>
-          <Text style={styles.imagePlaceholderText}>🛠️</Text>
+      <View style={styles.imageContainer}>
+        {image ? (
+          <Image source={{ uri: image }} style={styles.image} />
+        ) : (
+          <View style={[styles.image, styles.imagePlaceholder]}>
+            <Text style={styles.imagePlaceholderText}>🛠️</Text>
+          </View>
+        )}
+        
+        {/* Worker Overlay */}
+        <View style={styles.workerOverlay}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarFallback]}>
+              <Text style={styles.avatarInitial}>{initial}</Text>
+            </View>
+          )}
+          <Text style={styles.workerName} numberOfLines={1}>{workerName}</Text>
         </View>
-      )}
+      </View>
+
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={2}>{gig.title}</Text>
-        <Text style={styles.worker} numberOfLines={1}>{workerName}</Text>
         <View style={styles.footer}>
-          <StarRating value={gig.rating ?? 0} size={13} />
+          <StarRating value={gig.rating ?? 0} size={12} />
           <Text style={styles.reviewCount}> ({gig.review_count ?? 0})</Text>
           <View style={{ flex: 1 }} />
-          <Text style={styles.price}>${gig.base_price}/hr</Text>
+          <Text style={styles.price}>From ${gig.base_price}</Text>
         </View>
       </View>
     </Pressable>
@@ -41,32 +60,90 @@ export function GigCard({ gig, onPress }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    width: 200,
+    width: 220,
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: radius.xl,
     overflow: "hidden",
     marginRight: spacing.md,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 5,
+    marginBottom: spacing.sm, // Padding for shadow
   },
-  image: { width: "100%", height: 120, resizeMode: "cover" },
-  imagePlaceholder: {
+  imageContainer: {
     width: "100%",
-    height: 120,
-    backgroundColor: colors.borderLight,
+    height: 160,
+    position: "relative",
+  },
+  image: { 
+    width: "100%", 
+    height: "100%", 
+    resizeMode: "cover",
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+  },
+  imagePlaceholder: {
+    backgroundColor: colors.brandGreenLight,
     alignItems: "center",
     justifyContent: "center",
   },
   imagePlaceholderText: { fontSize: 36 },
-  body: { padding: 12 },
-  title: { fontSize: 14, fontWeight: "700", color: colors.text, marginBottom: 2 },
-  worker: { fontSize: 12, color: colors.subtext, marginBottom: 8 },
-  footer: { flexDirection: "row", alignItems: "center" },
+  workerOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 44,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.border,
+  },
+  avatarFallback: {
+    backgroundColor: colors.brandGreen,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarInitial: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  workerName: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+    marginLeft: 8,
+    flex: 1,
+  },
+  body: { 
+    padding: 14,
+    height: 85, // Fixed height for body to keep footer aligned
+    justifyContent: "space-between",
+  },
+  title: { 
+    fontSize: 15, 
+    fontWeight: "bold", 
+    color: colors.text, 
+    lineHeight: 20,
+  },
+  footer: { 
+    flexDirection: "row", 
+    alignItems: "center",
+  },
   reviewCount: { fontSize: 12, color: colors.subtext },
-  price: { fontSize: 14, fontWeight: "700", color: colors.brandGreen },
+  price: { 
+    fontSize: 14, 
+    fontWeight: "700", 
+    color: colors.brandGreen 
+  },
 });
+

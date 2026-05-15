@@ -12,7 +12,7 @@ import type { CustomerStackParamList } from "../../navigation/stacks/CustomerSta
 
 export type BookingFlowParamList = {
   GigBooking: { gigId: string };
-  LocationSelection: { gigId: string };
+  LocationSelection: { gigId: string; notes?: string; imageUris?: string[] };
   DateTimeSelection: { gigId: string; taskerId: string; address: string; latitude?: number; longitude?: number };
   ServiceSpecific: { gigId: string; taskerId: string; address: string; latitude?: number; longitude?: number; scheduledAt: string; category: ServiceCategory };
   ReviewSummary: {
@@ -41,20 +41,15 @@ export function BookingFlowNavigator() {
   return (
     <Stack.Navigator
       screenOptions={{
-        headerShown: true,
-        headerStyle: { backgroundColor: "#fff" },
-        headerTitleStyle: { fontSize: 16, fontWeight: "700", color: "#111111" },
-        headerTintColor: "#00BF63",
-        headerShadowVisible: false,
-        headerBackTitleVisible: false,
+        headerShown: false,
       }}
     >
-      <Stack.Screen name="GigBooking" component={GigBookingScreen} initialParams={{ gigId }} options={{ title: "Book Service" }} />
-      <Stack.Screen name="LocationSelection" component={LocationSelectionScreen} options={{ title: "Select Location" }} />
-      <Stack.Screen name="DateTimeSelection" component={DateTimeSelectionScreen} options={{ title: "Choose Date & Time" }} />
-      <Stack.Screen name="ServiceSpecific" component={ServiceSpecificBookingScreen} options={{ title: "Service Details" }} />
-      <Stack.Screen name="ReviewSummary" component={ReviewSummaryScreen} options={{ title: "Review & Confirm" }} />
-      <Stack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="GigBooking" component={GigBookingScreen} initialParams={{ gigId }} />
+      <Stack.Screen name="LocationSelection" component={LocationSelectionScreen} />
+      <Stack.Screen name="DateTimeSelection" component={DateTimeSelectionScreen} />
+      <Stack.Screen name="ServiceSpecific" component={ServiceSpecificBookingScreen} />
+      <Stack.Screen name="ReviewSummary" component={ReviewSummaryScreen} />
+      <Stack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} />
     </Stack.Navigator>
   );
 }

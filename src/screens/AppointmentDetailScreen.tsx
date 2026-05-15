@@ -110,12 +110,12 @@ export function AppointmentDetailScreen() {
       {/* Pricing card */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Pricing</Text>
-        <Row label="Base Price" value={task.base_price != null ? `$${task.base_price}` : "—"} />
+        <Row label="Base Price" value={task.base_price != null ? `Rs. ${task.base_price}` : "—"} />
         {task.quoted_price != null && (
-          <Row label="Quoted Price" value={`$${task.quoted_price}`} />
+          <Row label="Quoted Price" value={`Rs. ${task.quoted_price}`} />
         )}
         {task.final_price != null && (
-          <Row label="Final Price" value={`$${task.final_price}`} />
+          <Row label="Final Price" value={`Rs. ${task.final_price}`} />
         )}
       </View>
 

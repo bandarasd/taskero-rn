@@ -11,7 +11,8 @@ export function GigListItem({ gig, onPress }: Props) {
   const workerName = gig.tasker
     ? `${gig.tasker.first_name ?? ""} ${gig.tasker.last_name ?? ""}`.trim()
     : "Worker";
-  const image = gig.attachments?.[0];
+  const raw = gig.attachments?.[0];
+  const image = typeof raw === "string" ? raw : (raw as { url?: string })?.url ?? null;
 
   return (
     <Pressable style={styles.row} onPress={onPress}>
@@ -30,7 +31,7 @@ export function GigListItem({ gig, onPress }: Props) {
           <Text style={styles.reviews}> ({gig.review_count ?? 0})</Text>
         </View>
       </View>
-      <Text style={styles.price}>${gig.base_price}/hr</Text>
+      <Text style={styles.price}>from Rs. {gig.base_price}</Text>
     </Pressable>
   );
 }

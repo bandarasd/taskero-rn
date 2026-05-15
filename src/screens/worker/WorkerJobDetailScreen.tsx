@@ -139,9 +139,10 @@ export function WorkerJobDetailScreen() {
     : "Customer";
 
   const category = (task.category || task.gig?.category || "General") as string;
+  const toUrl = (a: unknown) => typeof a === "string" ? a : (a as { url?: string })?.url ?? null;
   const imageUri =
-    task.attachments?.[0] ||
-    task.gig?.attachments?.[0] ||
+    toUrl(task.attachments?.[0]) ||
+    toUrl(task.gig?.attachments?.[0]) ||
     CATEGORY_IMAGES[category] ||
     CATEGORY_IMAGES.General;
 
@@ -204,9 +205,9 @@ export function WorkerJobDetailScreen() {
             <InfoRow icon="📍" label="Location" value={task.location_address ?? "—"} />
             <InfoRow icon="🏷" label="Category" value={task.category ?? "—"} />
             <InfoRow
-              icon="💲"
+              icon="💰"
               label="Base Price"
-              value={task.base_price != null ? `$${task.base_price}` : "—"}
+              value={task.base_price != null ? `Rs. ${task.base_price}` : "—"}
             />
           </View>
 

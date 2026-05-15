@@ -1,5 +1,6 @@
 import React from "react";
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View, StatusBar } from "react-native";
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View, StatusBar, SafeAreaView } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { getNotifications, markNotificationRead } from "../services/notificationService";
@@ -11,6 +12,7 @@ import { useAuth } from "../store/authStore";
 import { APINotification } from "../types";
 
 export function NotificationsScreen() {
+  const navigation = useNavigation();
   const { dbUserId } = useAuth();
   const qc = useQueryClient();
 
@@ -58,6 +60,16 @@ export function NotificationsScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
+      <SafeAreaView style={{ backgroundColor: "#fff" }} />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <Pressable style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color="#111111" />
+        </Pressable>
+        <Text style={styles.headerTitle}>Notifications</Text>
+        <View style={{ width: 40 }} />
+      </View>
       {isLoading ? (
         <LoadingSpinner />
       ) : (
@@ -87,6 +99,27 @@ export function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111111",
+  },
   listContent: {
     paddingBottom: 40,
   },

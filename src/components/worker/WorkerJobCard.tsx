@@ -38,7 +38,8 @@ export function WorkerJobCard({ task, onPress }: Props) {
     : "Customer";
 
   const category = (task.category || task.gig?.category || "General") as string;
-  const imageUri = task.attachments?.[0] || task.gig?.attachments?.[0] || CATEGORY_IMAGES[category] || CATEGORY_IMAGES.General;
+  const toUrl = (a: unknown) => typeof a === "string" ? a : (a as { url?: string })?.url ?? null;
+  const imageUri = toUrl(task.attachments?.[0]) || toUrl(task.gig?.attachments?.[0]) || CATEGORY_IMAGES[category] || CATEGORY_IMAGES.General;
 
   return (
     <Pressable style={styles.card} onPress={onPress}>
@@ -67,7 +68,7 @@ export function WorkerJobCard({ task, onPress }: Props) {
               <Text style={styles.customerName}>{customerName}</Text>
             </View>
             <Text style={styles.price}>
-              {task.quoted_price != null ? `$${task.quoted_price}` : task.base_price != null ? `$${task.base_price}` : "Pending"}
+              {task.quoted_price != null ? `Rs. ${task.quoted_price}` : task.base_price != null ? `Rs. ${task.base_price}` : "Pending"}
             </Text>
           </View>
         </View>
