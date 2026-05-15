@@ -118,6 +118,7 @@ export type APITask = {
   customer?: ApiUser | null;
   tasker?: ApiUser | null;
   gig?: Gig | null;
+  gig_title?: string | null;
   created_at?: string;
   updated_at?: string;
 };

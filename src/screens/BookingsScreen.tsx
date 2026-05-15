@@ -11,6 +11,7 @@ import { colors } from "../theme/colors";
 import { radius, spacing } from "../theme/spacing";
 import { useAuth } from "../store/authStore";
 import type { CustomerStackParamList } from "../navigation/stacks/CustomerStack";
+import { Animated } from "react-native";
 
 type Nav = NativeStackNavigationProp<CustomerStackParamList>;
 
@@ -21,6 +22,7 @@ export function BookingsScreen() {
   const { dbUserId } = useAuth();
   const navigation = useNavigation<Nav>();
   const [tab, setTab] = useState<"active" | "past">("active");
+  const [underlineAnim] = useState(new Animated.Value(0));
 
   const { data: tasks, isLoading, refetch } = useQuery({
     queryKey: ["tasks", "customer", dbUserId],
@@ -28,22 +30,53 @@ export function BookingsScreen() {
     enabled: !!dbUserId,
   });
 
+  const activeCount = (tasks ?? []).filter((t) => ACTIVE_STATUSES.includes(t.status)).length;
+
   const filtered = (tasks ?? []).filter((t) =>
     tab === "active" ? ACTIVE_STATUSES.includes(t.status) : PAST_STATUSES.includes(t.status)
   );
 
+  const handleTabChange = (newTab: "active" | "past") => {
+    setTab(newTab);
+    Animated.spring(underlineAnim, {
+      toValue: newTab === "active" ? 0 : 1,
+      useNativeDriver: false, // width/left properties don't support native driver
+      tension: 50,
+      friction: 8,
+    }).start();
+  };
+
+  const indicatorTranslate = underlineAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0%", "50%"],
+  });
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.heading}>Bookings</Text>
-        <View style={styles.tabs}>
-          {(["active", "past"] as const).map((t) => (
-            <Pressable key={t} style={[styles.tab, tab === t && styles.tabActive]} onPress={() => setTab(t)}>
-              <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
-                {t === "active" ? "Active" : "Past"}
-              </Text>
-            </Pressable>
-          ))}
+        <Text style={styles.heading}>My Bookings</Text>
+        <Text style={styles.subheading}>{activeCount} active</Text>
+
+        <View style={styles.tabContainer}>
+          <View style={styles.tabRow}>
+            {(["active", "past"] as const).map((t) => (
+              <Pressable key={t} style={styles.tab} onPress={() => handleTabChange(t)}>
+                <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
+                  {t === "active" ? "Active" : "Past"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.indicatorTrack}>
+            <Animated.View
+              style={[
+                styles.indicator,
+                {
+                  left: indicatorTranslate,
+                },
+              ]}
+            />
+          </View>
         </View>
       </View>
 
@@ -56,9 +89,13 @@ export function BookingsScreen() {
         >
           {filtered.length === 0 ? (
             <EmptyState
-              icon={tab === "active" ? "📅" : "🗂️"}
+              icon={tab === "active" ? "📋" : "🗂️"}
               title={tab === "active" ? "No active bookings" : "No past bookings"}
-              message={tab === "active" ? "Book a service to get started." : "Your completed jobs will appear here."}
+              message={
+                tab === "active"
+                  ? "When you book a service, it'll show up here."
+                  : "Completed and cancelled jobs will appear here."
+              }
             />
           ) : (
             filtered.map((task) => (
@@ -80,21 +117,53 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: colors.card,
     paddingHorizontal: spacing.lg,
-    paddingTop: 56,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingTop: 64,
+    paddingBottom: 0,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 4,
+    zIndex: 10,
   },
-  heading: { fontSize: 26, fontWeight: "700", color: colors.text, marginBottom: 16 },
-  tabs: {
+  heading: { fontSize: 28, fontWeight: "800", color: colors.text, marginBottom: 4 },
+  subheading: { fontSize: 13, color: colors.subtext, marginBottom: 20 },
+  tabContainer: {
+    marginTop: 8,
+  },
+  tabRow: {
     flexDirection: "row",
-    backgroundColor: colors.borderLight,
-    borderRadius: radius.full,
-    padding: 3,
   },
-  tab: { flex: 1, paddingVertical: 8, alignItems: "center", borderRadius: radius.full },
-  tabActive: { backgroundColor: colors.card, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2 },
-  tabText: { fontSize: 14, fontWeight: "600", color: colors.subtext },
-  tabTextActive: { color: colors.text },
-  list: { padding: spacing.lg, paddingBottom: 32 },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  tabText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.subtext,
+  },
+  tabTextActive: {
+    color: colors.text,
+  },
+  indicatorTrack: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+    width: "100%",
+    position: "relative",
+  },
+  indicator: {
+    position: "absolute",
+    bottom: 0,
+    height: 2.5,
+    width: "50%",
+    backgroundColor: colors.brandGreen,
+    borderRadius: 2,
+  },
+  list: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 32,
+  },
 });
