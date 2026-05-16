@@ -8,12 +8,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { getTaskById, respondToQuote } from "../services/taskService";
+import { getUserById } from "../services/userService";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { Avatar } from "../components/common/Avatar";
 import { Button } from "../components/common/Button";
 import { colors } from "../theme/colors";
 import { spacing } from "../theme/spacing";
-import { CATEGORY_ICONS, ServiceCategory, TaskStatus } from "../types";
+import { TaskStatus } from "../types";
 import type { CustomerStackParamList } from "../navigation/stacks/CustomerStack";
 
 type RouteProps = RouteProp<CustomerStackParamList, "AppointmentDetail">;
@@ -157,6 +158,12 @@ export function AppointmentDetailScreen() {
     queryFn: () => getTaskById(taskId),
   });
 
+  const { data: tasker } = useQuery({
+    queryKey: ["user", task?.tasker_id],
+    queryFn: () => getUserById(task!.tasker_id!),
+    enabled: !!task?.tasker_id,
+  });
+
   const handleRespond = async (accepted: boolean) => {
     setRespondLoading(true);
     try {
@@ -181,12 +188,7 @@ export function AppointmentDetailScreen() {
 
   if (isLoading || !task) return <LoadingSpinner />;
 
-  const workerName = task.tasker
-    ? `${task.tasker.first_name ?? ""} ${task.tasker.last_name ?? ""}`.trim()
-    : "Worker";
-
-  const category = task.category as ServiceCategory;
-  const categoryEmoji = CATEGORY_ICONS[category] || "✨";
+  const workerName = tasker ? `${tasker.first_name ?? ""} ${tasker.last_name ?? ""}`.trim() : "Worker";
 
   return (
     <View style={styles.container}>
@@ -200,15 +202,7 @@ export function AppointmentDetailScreen() {
           colors={[colors.brandGreenLight, "#FFFFFF"]}
           style={styles.hero}
         >
-          <TouchableOpacity 
-            style={[styles.backButton, { top: Math.max(insets.top, 20) }]}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="chevron-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-          
-          <Text style={styles.heroEmoji}>{categoryEmoji}</Text>
-          <Text style={styles.heroTitle}>{task.gig?.title ?? task.title ?? "Service"}</Text>
+          <Text style={styles.heroTitle}>{task.gig_title ?? task.gig?.title ?? task.title ?? "Service"}</Text>
         </LinearGradient>
 
         {/* 2. Status Journey Strip */}
@@ -217,7 +211,7 @@ export function AppointmentDetailScreen() {
         {/* 3. Worker Card Section */}
         <View style={styles.section}>
           <View style={styles.workerRow}>
-            <Avatar uri={task.tasker?.avatar_url} name={workerName} size={56} />
+            <Avatar uri={tasker?.avatar_url} name={workerName} size={56} />
             <View style={styles.workerInfo}>
               <Text style={styles.workerName}>{workerName}</Text>
               <Text style={styles.workerSubtitle}>Your service provider</Text>
@@ -362,7 +356,7 @@ export function AppointmentDetailScreen() {
             label="Book Again"
             onPress={() => {
               if (task.gig_id) {
-                navigation.navigate("GigDetail", { gigId: task.gig_id });
+                navigation.navigate("ServiceDetail", { gigId: task.gig_id });
               }
             }}
             fullWidth
@@ -392,22 +386,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingTop: 40,
   },
-  backButton: {
-    position: "absolute",
-    left: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.8)",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  heroEmoji: { fontSize: 64, marginBottom: 8 },
   heroTitle: { fontSize: 24, fontWeight: "800", color: colors.text, textAlign: "center", paddingHorizontal: 20 },
 
   // Journey

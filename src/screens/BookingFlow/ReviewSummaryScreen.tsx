@@ -1,8 +1,7 @@
-import React, { useState, useRef } from "react";
+import React, { useRef } from "react";
 import { ScrollView, StyleSheet, Text, View, Pressable } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { createTask } from "../../services/taskService";
 import { useQuery } from "@tanstack/react-query";
 import { getGigById } from "../../services/gigService";
 import { BookingStepDots } from "../../components/booking/BookingStepDots";
@@ -11,7 +10,6 @@ import { StickyPriceCTA } from "../../components/booking/StickyPriceCTA";
 import { Avatar } from "../../components/common/Avatar";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
-import { useAuth } from "../../store/authStore";
 import type { BookingFlowParamList } from "./BookingFlowNavigator";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -27,8 +25,6 @@ export function ReviewSummaryScreen() {
     gigId, taskerId, address, latitude, longitude,
     scheduledAt, category, details, basePrice, notes,
   } = route.params;
-  const { dbUserId } = useAuth();
-  const [loading, setLoading] = useState(false);
   const toastRef = useRef<BookingToastHandle>(null);
 
   const { data: gig } = useQuery({
@@ -40,30 +36,11 @@ export function ReviewSummaryScreen() {
     ? `${gig.tasker.first_name ?? ""} ${gig.tasker.last_name ?? ""}`.trim()
     : "Worker";
 
-  const handleConfirm = async () => {
-    if (!dbUserId) return;
-    setLoading(true);
-    try {
-      const task = await createTask({
-        gig_id: gigId,
-        tasker_id: taskerId,
-        customer_id: dbUserId,
-        title: category,
-        category,
-        location_address: address,
-        location_latitude: latitude,
-        location_longitude: longitude,
-        scheduled_at: scheduledAt,
-        base_price: basePrice,
-        notes,
-        status: "pending",
-      });
-      navigation.navigate("PaymentSuccess", { taskId: task.id });
-    } catch {
-      toastRef.current?.show("Could not create booking. Please try again.", "error");
-    } finally {
-      setLoading(false);
-    }
+  const handleConfirm = () => {
+    navigation.navigate("Payment", {
+      gigId, taskerId, address, latitude, longitude,
+      scheduledAt, category, details, basePrice, notes,
+    });
   };
 
   const detailEntries = Object.entries(details ?? {}).filter(([, v]) => String(v).trim().length > 0);
@@ -150,10 +127,9 @@ export function ReviewSummaryScreen() {
       </ScrollView>
 
       <StickyPriceCTA
-        label="Place Booking"
+        label="Continue to Payment"
         price={basePrice.toLocaleString()}
         onPress={handleConfirm}
-        loading={loading}
       />
       
       <BookingToast ref={toastRef} />
