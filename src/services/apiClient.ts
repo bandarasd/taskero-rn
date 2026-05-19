@@ -14,6 +14,23 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
+export class ApiError extends Error {
+  constructor(public statusCode: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+async function parseErrorMessage(response: Response): Promise<string> {
+  const text = await response.text();
+  try {
+    const json = JSON.parse(text);
+    return json.error ?? json.message ?? text;
+  } catch {
+    return text || `Request failed (${response.status})`;
+  }
+}
+
 export async function apiRequest<T>(
   path: string,
   options: { method?: HttpMethod; body?: unknown; headers?: Record<string, string> } = {}
@@ -22,20 +39,23 @@ export async function apiRequest<T>(
     throw new Error("Missing EXPO_PUBLIC_API_BASE_URL");
   }
 
+  if (!firebaseAuth.currentUser) {
+    throw new ApiError(401, "Not authenticated");
+  }
+
   const token = await withTimeout(
-    firebaseAuth.currentUser?.getIdToken() ?? Promise.resolve(undefined),
+    firebaseAuth.currentUser.getIdToken(),
     REQUEST_TIMEOUT_MS,
     "getIdToken"
   );
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    Authorization: `Bearer ${token}`,
     ...(options.headers ?? {}),
   };
 
   const url = `${env.apiBaseUrl}${path}`;
-  console.log(`[api] ${options.method ?? "GET"} ${url} token=${!!token}`);
   const response = await withTimeout(
     fetch(url, {
       method: options.method ?? "GET",
@@ -47,8 +67,8 @@ export async function apiRequest<T>(
   );
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Request failed (${response.status})`);
+    const message = await parseErrorMessage(response);
+    throw new ApiError(response.status, message);
   }
 
   return (await response.json()) as T;
@@ -56,24 +76,24 @@ export async function apiRequest<T>(
 
 export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
   if (!env.apiBaseUrl) throw new Error("Missing EXPO_PUBLIC_API_BASE_URL");
+  if (!firebaseAuth.currentUser) throw new ApiError(401, "Not authenticated");
   const token = await withTimeout(
-    firebaseAuth.currentUser?.getIdToken() ?? Promise.resolve(undefined),
+    firebaseAuth.currentUser.getIdToken(),
     REQUEST_TIMEOUT_MS,
     "getIdToken"
   );
-  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
   const response = await withTimeout(
     fetch(`${env.apiBaseUrl}${path}`, {
       method: "POST",
-      headers,
+      headers: { Authorization: `Bearer ${token}` },
       body: formData,
     }),
     REQUEST_TIMEOUT_MS,
     `POST ${path}`
   );
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Upload failed (${response.status})`);
+    const message = await parseErrorMessage(response);
+    throw new ApiError(response.status, message);
   }
   return (await response.json()) as T;
 }

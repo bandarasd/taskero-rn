@@ -112,6 +112,7 @@ export type APITask = {
   completed_at?: string | null;
   base_price?: number | null;
   quoted_price?: number | null;
+  quote_expires_at?: string | null;
   final_price?: number | null;
   notes?: string | null;
   attachments?: string[];
@@ -119,6 +120,7 @@ export type APITask = {
   tasker?: ApiUser | null;
   gig?: Gig | null;
   gig_title?: string | null;
+  gig_attachments?: string[] | null;
   created_at?: string;
   updated_at?: string;
 };

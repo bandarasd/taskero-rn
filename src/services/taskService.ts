@@ -24,10 +24,10 @@ export async function updateTaskStatus(id: string, status: TaskStatus) {
   });
 }
 
-export async function submitQuote(id: string, price: number, notes?: string) {
+export async function submitQuote(id: string, price: number, estimatedDurationMinutes: number, notes?: string) {
   return apiRequest<APITask>(`/tasks/${encodeURIComponent(id)}/quote`, {
     method: "PUT",
-    body: { price, notes },
+    body: { price, estimated_duration_minutes: estimatedDurationMinutes, notes },
   });
 }
 

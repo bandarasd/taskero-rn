@@ -4,6 +4,7 @@ import { User, onAuthStateChanged } from "firebase/auth";
 import { firebaseAuth } from "../services/firebase";
 import { ApiUser } from "../types";
 import { getUserByFirebaseUid, getUserByPhone } from "../services/userService";
+import { ApiError } from "../services/apiClient";
 
 export type UserRole = "customer" | "worker";
 
@@ -143,15 +144,19 @@ async function lookupUserProfile(nextUser: User) {
   if (nextUser.phoneNumber) {
     try {
       return await getUserByPhone(nextUser.phoneNumber);
-    } catch {
-      // Phone lookup failed — fall through to UID lookup as a fallback.
+    } catch (err) {
+      // 404 = not found by phone, fall through to UID lookup.
+      // Any other error is re-thrown so the caller can handle it.
+      if (!(err instanceof ApiError && err.statusCode === 404)) throw err;
     }
   }
 
   try {
     return await getUserByFirebaseUid(nextUser.uid);
-  } catch {
-    return null;
+  } catch (err) {
+    // 404 = no backend profile yet (new user).
+    if (err instanceof ApiError && err.statusCode === 404) return null;
+    throw err;
   }
 }
 

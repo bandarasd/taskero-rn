@@ -1,4 +1,5 @@
 import React from "react";
+import { PlaceholderScreen } from "../../components/PlaceholderScreen";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { ServiceCategory } from "../../types";
 
@@ -68,7 +69,7 @@ export function CustomerStack() {
       <Stack.Screen name="AppointmentDetail" component={AppointmentDetailScreen} options={{ title: "Booking Details" }} />
       <Stack.Screen name="AddReview" component={AddReviewScreen} options={{ title: "Leave a Review" }} />
       <Stack.Screen name="Messages" component={MessagesScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => ({ title: (route.params as any).otherUserName ?? "Chat" })} />
+      <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => ({ title: route.params.otherUserName ?? "Chat" })} />
       <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: "Edit Profile" }} />
       <Stack.Screen name="ClientPaymentMethods" component={PlaceholderScreen("Payment Methods")} options={{ title: "Payment Methods" }} />
@@ -83,15 +84,3 @@ export function CustomerStack() {
 }
 
 // Lightweight placeholder for screens not yet implemented
-function PlaceholderScreen(title: string) {
-  return function Placeholder() {
-    const { View, Text, StyleSheet } = require("react-native");
-    const { colors } = require("../../theme/colors");
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background }}>
-        <Text style={{ fontSize: 18, fontWeight: "700", color: colors.text }}>{title}</Text>
-        <Text style={{ fontSize: 14, color: colors.subtext, marginTop: 8 }}>Coming soon</Text>
-      </View>
-    );
-  };
-}

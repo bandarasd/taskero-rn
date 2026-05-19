@@ -1,4 +1,5 @@
 import React from "react";
+import { PlaceholderScreen } from "../../components/PlaceholderScreen";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Text } from "react-native";
@@ -28,9 +29,9 @@ import { colors } from "../../theme/colors";
 const sharedScreens = (Stack: ReturnType<typeof createNativeStackNavigator<WorkerStackParamList>>) => (
   <>
     <Stack.Screen name="WorkerJobDetail" component={WorkerJobDetailScreen} options={{ title: "Job Details" }} />
-    <Stack.Screen name="WorkerChat" component={WorkerChatScreen} options={({ route }) => ({ title: (route.params as any).otherUserName ?? "Chat" })} />
+    <Stack.Screen name="WorkerChat" component={WorkerChatScreen} options={({ route }) => ({ title: route.params.otherUserName ?? "Chat" })} />
     <Stack.Screen name="WorkerServices" component={WorkerServicesScreen} options={{ title: "My Services" }} />
-    <Stack.Screen name="AddEditService" component={AddEditServiceScreen} options={({ route }) => ({ title: (route.params as any).gigId ? "Edit Service" : "Add Service" })} />
+    <Stack.Screen name="AddEditService" component={AddEditServiceScreen} options={({ route }) => ({ title: route.params.gigId ? "Edit Service" : "Add Service" })} />
     <Stack.Screen name="WorkerEarnings" component={WorkerEarningsScreen} options={{ title: "Earnings" }} />
     <Stack.Screen name="WorkerReviews" component={WorkerReviewsScreen} options={{ title: "Reviews" }} />
     <Stack.Screen name="WorkerEditProfile" component={EditProfileScreen} options={{ title: "Edit Profile" }} />
@@ -186,15 +187,3 @@ export function WorkerTabs() {
   );
 }
 
-function PlaceholderScreen(title: string) {
-  return function Placeholder() {
-    const { View, Text: T } = require("react-native");
-    const { colors: c } = require("../../theme/colors");
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background }}>
-        <T style={{ fontSize: 18, fontWeight: "700", color: c.text }}>{title}</T>
-        <T style={{ fontSize: 14, color: c.subtext, marginTop: 8 }}>Coming soon</T>
-      </View>
-    );
-  };
-}

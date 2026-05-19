@@ -32,21 +32,27 @@ export function ChatScreen() {
   const flatListRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const mountedRef = useRef(true);
+
   const loadMessages = async () => {
     try {
       const data = await getChatMessages(threadId);
-      setMessages(data);
+      if (mountedRef.current) setMessages(data);
     } catch {
-      // ignore
+      // ignore polling errors
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     loadMessages();
     pollRef.current = setInterval(loadMessages, 4000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    return () => {
+      mountedRef.current = false;
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, [threadId]);
 
   const handleSend = async () => {

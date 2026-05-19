@@ -304,6 +304,19 @@ export function AppointmentDetailScreen() {
           <View style={styles.quoteBanner}>
             <Text style={styles.quoteSubtitle}>Your worker has sent a quote</Text>
             <Text style={styles.quoteAmount}>Rs. {task.quoted_price}</Text>
+            {task.quote_expires_at && (
+              <View style={styles.expiryRow}>
+                <Ionicons name="time-outline" size={14} color={colors.warning} />
+                <Text style={styles.expiryText}>
+                  Expires {new Date(task.quote_expires_at).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </Text>
+              </View>
+            )}
             <View style={styles.quoteActions}>
               <Button
                 label="Decline"
@@ -326,19 +339,13 @@ export function AppointmentDetailScreen() {
       </ScrollView>
 
       {/* 7. Sticky Bottom Bar */}
-      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      {task.status !== "quoted" && <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         {task.status === "pending" && (
           <View style={styles.disabledBar}>
             <Text style={styles.disabledBarText}>Awaiting quote from worker</Text>
           </View>
         )}
-        {task.status === "quoted" && (
-          <Button
-            label="Review Quote"
-            onPress={() => {}} // Could scroll to quote banner
-            fullWidth
-          />
-        )}
+
         {(task.status === "accepted" || task.status === "in_progress") && (
           <Button
             label="Message Worker"
@@ -370,7 +377,7 @@ export function AppointmentDetailScreen() {
             fullWidth
           />
         )}
-      </View>
+      </View>}
     </View>
   );
 }
@@ -527,6 +534,8 @@ const styles = StyleSheet.create({
   },
   quoteSubtitle: { fontSize: 14, color: colors.subtext, marginBottom: 8 },
   quoteAmount: { fontSize: 40, fontWeight: "800", color: colors.brandGreen, marginBottom: 20 },
+  expiryRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 16 },
+  expiryText: { fontSize: 13, color: colors.warning, fontWeight: "600" },
   quoteActions: { flexDirection: "row", gap: 12, width: "100%" },
   quoteActionBtn: { flex: 1 },
 

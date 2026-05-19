@@ -1,4 +1,5 @@
 import React from "react";
+import { PlaceholderScreen } from "../../components/PlaceholderScreen";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Text, View } from "react-native";
@@ -33,7 +34,7 @@ const sharedScreens = (Stack: ReturnType<typeof createNativeStackNavigator<Custo
     <Stack.Screen name="GigReviews" component={GigReviewsScreen} options={{ title: "Reviews" }} />
     <Stack.Screen name="AppointmentDetail" component={AppointmentDetailScreen} options={{ title: "Booking Details" }} />
     <Stack.Screen name="AddReview" component={AddReviewScreen} options={{ title: "Leave a Review" }} />
-    <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => ({ title: (route.params as any).otherUserName ?? "Chat" })} />
+    <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => ({ title: route.params.otherUserName ?? "Chat" })} />
     <Stack.Screen name="CategoryServices" component={CategoryServicesScreen} options={{ title: "" }} />
     <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: "Edit Profile" }} />
     <Stack.Screen name="ClientNotifications" component={NotificationsScreen} options={{ title: "Notifications" }} />
@@ -165,15 +166,3 @@ export function CustomerTabs() {
   );
 }
 
-function PlaceholderScreen(title: string) {
-  return function Placeholder() {
-    const { View, Text: T } = require("react-native");
-    const { colors: c } = require("../../theme/colors");
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background }}>
-        <T style={{ fontSize: 18, fontWeight: "700", color: c.text }}>{title}</T>
-        <T style={{ fontSize: 14, color: c.subtext, marginTop: 8 }}>Coming soon</T>
-      </View>
-    );
-  };
-}

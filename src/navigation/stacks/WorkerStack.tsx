@@ -1,4 +1,5 @@
 import React from "react";
+import { PlaceholderScreen } from "../../components/PlaceholderScreen";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 // Screens
@@ -57,10 +58,10 @@ export function WorkerStack() {
       <Stack.Screen name="WorkerJobDetail" component={WorkerJobDetailScreen} options={{ title: "Job Details" }} />
       <Stack.Screen name="WorkerSchedule" component={WorkerScheduleScreen} options={{ headerShown: false }} />
       <Stack.Screen name="WorkerMessages" component={WorkerMessagesScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="WorkerChat" component={WorkerChatScreen} options={({ route }) => ({ title: (route.params as any).otherUserName ?? "Chat" })} />
+      <Stack.Screen name="WorkerChat" component={WorkerChatScreen} options={({ route }) => ({ title: route.params.otherUserName ?? "Chat" })} />
       <Stack.Screen name="WorkerProfile" component={WorkerProfileScreen} options={{ headerShown: false }} />
       <Stack.Screen name="WorkerServices" component={WorkerServicesScreen} options={{ title: "My Services" }} />
-      <Stack.Screen name="AddEditService" component={AddEditServiceScreen} options={({ route }) => ({ title: (route.params as any).gigId ? "Edit Service" : "Add Service" })} />
+      <Stack.Screen name="AddEditService" component={AddEditServiceScreen} options={({ route }) => ({ title: route.params.gigId ? "Edit Service" : "Add Service" })} />
       <Stack.Screen name="WorkerEarnings" component={WorkerEarningsScreen} options={{ title: "Earnings" }} />
       <Stack.Screen name="WorkerReviews" component={WorkerReviewsScreen} options={{ title: "Reviews" }} />
       <Stack.Screen name="WorkerEditProfile" component={EditProfileScreen} options={{ title: "Edit Profile" }} />
@@ -74,15 +75,3 @@ export function WorkerStack() {
   );
 }
 
-function PlaceholderScreen(title: string) {
-  return function Placeholder() {
-    const { View, Text } = require("react-native");
-    const { colors } = require("../../theme/colors");
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background }}>
-        <Text style={{ fontSize: 18, fontWeight: "700", color: colors.text }}>{title}</Text>
-        <Text style={{ fontSize: 14, color: colors.subtext, marginTop: 8 }}>Coming soon</Text>
-      </View>
-    );
-  };
-}

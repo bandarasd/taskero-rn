@@ -86,6 +86,7 @@ export function WorkerJobDetailScreen() {
   const { taskId } = route.params;
   const qc = useQueryClient();
   const [quotePrice, setQuotePrice] = useState("");
+  const [quoteDuration, setQuoteDuration] = useState("");
   const [quoteNotes, setQuoteNotes] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -104,13 +105,18 @@ export function WorkerJobDetailScreen() {
 
   const handleSubmitQuote = async () => {
     const price = parseFloat(quotePrice);
+    const duration = parseInt(quoteDuration, 10);
     if (!price || isNaN(price)) {
       Alert.alert("Enter a valid price");
       return;
     }
+    if (!duration || isNaN(duration) || duration <= 0) {
+      Alert.alert("Enter estimated duration in minutes");
+      return;
+    }
     setLoading(true);
     try {
-      await submitQuote(taskId, price, quoteNotes || undefined);
+      await submitQuote(taskId, price, duration, quoteNotes || undefined);
       await refresh();
     } catch (e: any) {
       Alert.alert("Error", e.message || "Could not submit quote");
@@ -254,6 +260,17 @@ export function WorkerJobDetailScreen() {
                       onChangeText={setQuotePrice}
                       placeholder="Price"
                       keyboardType="decimal-pad"
+                      placeholderTextColor={colors.subtext}
+                    />
+                  </View>
+                  <View style={styles.durationInputWrapper}>
+                    <Text style={styles.inputPrefix}>⏱</Text>
+                    <TextInput
+                      style={styles.priceInput}
+                      value={quoteDuration}
+                      onChangeText={setQuoteDuration}
+                      placeholder="Estimated duration (minutes)"
+                      keyboardType="number-pad"
                       placeholderTextColor={colors.subtext}
                     />
                   </View>
@@ -456,6 +473,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.brandGreenLight,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    height: 52,
+  },
+  durationInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.borderLight,
     borderRadius: radius.md,
     paddingHorizontal: 12,
     height: 52,
