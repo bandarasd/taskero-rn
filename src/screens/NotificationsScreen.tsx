@@ -1,7 +1,7 @@
 import React from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View, StatusBar, SafeAreaView } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { getNotifications, markNotificationRead } from "../services/notificationService";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
@@ -13,7 +13,7 @@ import { APINotification } from "../types";
 
 export function NotificationsScreen() {
   const navigation = useNavigation();
-  const { dbUserId } = useAuth();
+  const { dbUserId, role } = useAuth();
   const qc = useQueryClient();
 
   const { data, isLoading, refetch } = useQuery({
@@ -22,13 +22,32 @@ export function NotificationsScreen() {
     enabled: !!dbUserId,
   });
 
+  const markAllRead = useMutation({
+    mutationFn: async () => {
+      const unread = (data ?? []).filter((n) => !n.is_read);
+      await Promise.all(unread.map((n) => markNotificationRead(n.id)));
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
   const handleRead = async (n: APINotification) => {
-    if (n.is_read) return;
     try {
-      await markNotificationRead(n.id);
-      qc.invalidateQueries({ queryKey: ["notifications"] });
+      if (!n.is_read) {
+        await markNotificationRead(n.id);
+        qc.invalidateQueries({ queryKey: ["notifications"] });
+      }
+      const taskId = n.data && (n.data as any).task_id;
+      if (taskId) {
+        if (role === "worker") {
+          navigation.navigate("WorkerJobDetail" as never, { taskId } as never);
+        } else {
+          navigation.navigate("AppointmentDetail" as never, { taskId } as never);
+        }
+      }
     } catch {}
   };
+
+  const unreadCount = (data ?? []).filter((n) => !n.is_read).length;
 
   const renderItem = ({ item: n }: { item: APINotification }) => (
     <Pressable
@@ -68,7 +87,13 @@ export function NotificationsScreen() {
           <Ionicons name="arrow-back" size={24} color="#111111" />
         </Pressable>
         <Text style={styles.headerTitle}>Notifications</Text>
-        <View style={{ width: 40 }} />
+        {unreadCount > 0 ? (
+          <Pressable onPress={() => markAllRead.mutate()} style={styles.markAllBtn}>
+            <Text style={styles.markAllText}>Mark all read</Text>
+          </Pressable>
+        ) : (
+          <View style={{ width: 80 }} />
+        )}
       </View>
       {isLoading ? (
         <LoadingSpinner />
@@ -119,6 +144,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#111111",
+  },
+  markAllBtn: {
+    width: 80,
+    alignItems: "flex-end",
+  },
+  markAllText: {
+    fontSize: 13,
+    color: colors.brandGreen,
+    fontWeight: "600",
   },
   listContent: {
     paddingBottom: 40,

@@ -79,7 +79,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Fresh login with no backend profile — let them complete registration.
           setHasProfile(false);
         }
-      } catch {
+      } catch (err) {
+        // If it's a 404 we already handled it inside lookupUserProfile.
+        // Any other error (network down, timeout) means we can't determine
+        // profile status — sign out so the user retries rather than landing
+        // on the create-account screen with an existing account.
+        await firebaseAuth.signOut();
         setHasProfile(false);
       } finally {
         setAuthLoading(false);

@@ -136,10 +136,16 @@ export function HomeScreen() {
   };
 
   const handleReadNotification = async (n: APINotification) => {
-    if (n.is_read) return;
     try {
-      await markNotificationRead(n.id);
-      qc.invalidateQueries({ queryKey: ["notifications"] });
+      if (!n.is_read) {
+        await markNotificationRead(n.id);
+        qc.invalidateQueries({ queryKey: ["notifications"] });
+      }
+      const taskId = n.data && (n.data as any).task_id;
+      if (taskId) {
+        setShowNotifications(false);
+        navigation.navigate("AppointmentDetail", { taskId });
+      }
     } catch {}
   };
 

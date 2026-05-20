@@ -46,7 +46,7 @@ export function WorkerMessagesScreen() {
                 const otherName = other
                   ? `${other.first_name ?? ""} ${other.last_name ?? ""}`.trim()
                   : "Customer";
-                navigation.navigate("WorkerChat", { threadId: item.id, otherUserName: otherName });
+                navigation.navigate("WorkerChat", { threadId: item.id, otherUserName: otherName, taskId: item.task_id ?? undefined });
               }}
             />
           )}

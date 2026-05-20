@@ -17,12 +17,14 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getTaskById, submitQuote, updateTaskStatus } from "../../services/taskService";
 import { getUserById } from "../../services/userService";
+import { createThread } from "../../services/chatService";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { Avatar } from "../../components/common/Avatar";
 import { TaskStatusBadge } from "../../components/common/Badge";
 import { Button } from "../../components/common/Button";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
+import { useAuth } from "../../store/authStore";
 import type { WorkerStackParamList } from "../../navigation/stacks/WorkerStack";
 
 type RouteProps = RouteProp<WorkerStackParamList, "WorkerJobDetail">;
@@ -84,11 +86,13 @@ export function WorkerJobDetailScreen() {
   const route = useRoute<RouteProps>();
   const navigation = useNavigation<Nav>();
   const { taskId } = route.params;
+  const { dbUserId } = useAuth();
   const qc = useQueryClient();
   const [quotePrice, setQuotePrice] = useState("");
   const [quoteDuration, setQuoteDuration] = useState("");
   const [quoteNotes, setQuoteNotes] = useState("");
   const [loading, setLoading] = useState(false);
+  const [messageLoading, setMessageLoading] = useState(false);
 
   const { data: task, isLoading } = useQuery({
     queryKey: ["task", taskId],
@@ -102,6 +106,22 @@ export function WorkerJobDetailScreen() {
   });
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["task", taskId] });
+
+  const handleMessage = async () => {
+    if (!task?.customer_id || !dbUserId) return;
+    setMessageLoading(true);
+    try {
+      const displayName = customer
+        ? `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim() || "Customer"
+        : "Customer";
+      const thread = await createThread(task.customer_id, dbUserId, taskId);
+      navigation.navigate("WorkerChat", { threadId: thread.id, otherUserName: displayName, taskId });
+    } catch {
+      Alert.alert("Error", "Could not open conversation");
+    } finally {
+      setMessageLoading(false);
+    }
+  };
 
   const handleSubmitQuote = async () => {
     const price = parseFloat(quotePrice);
@@ -188,15 +208,10 @@ export function WorkerJobDetailScreen() {
               <Avatar uri={displayCustomer?.avatar_url} name={customerName} size={52} />
               <View style={styles.customerInfo}>
                 <Text style={styles.customerName}>{customerName}</Text>
-                <TouchableOpacity
-                  onPress={() =>
-                    navigation.navigate("WorkerChat", {
-                      threadId: taskId,
-                      otherUserName: customerName,
-                    })
-                  }
-                >
-                  <Text style={styles.messageLink}>Message →</Text>
+                <TouchableOpacity onPress={handleMessage} disabled={messageLoading}>
+                  <Text style={styles.messageLink}>
+                    {messageLoading ? "Opening..." : "Message →"}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>

@@ -9,6 +9,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { getTaskById, respondToQuote } from "../services/taskService";
 import { getUserById } from "../services/userService";
+import { createThread } from "../services/chatService";
+import { useAuth } from "../store/authStore";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { Avatar } from "../components/common/Avatar";
 import { Button } from "../components/common/Button";
@@ -152,6 +154,8 @@ export function AppointmentDetailScreen() {
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
   const [respondLoading, setRespondLoading] = useState(false);
+  const [messageLoading, setMessageLoading] = useState(false);
+  const { dbUserId } = useAuth();
 
   const { data: task, isLoading } = useQuery({
     queryKey: ["task", taskId],
@@ -174,6 +178,20 @@ export function AppointmentDetailScreen() {
       Alert.alert("Error", "Could not respond to quote");
     } finally {
       setRespondLoading(false);
+    }
+  };
+
+  const handleMessage = async () => {
+    if (!dbUserId || !task?.tasker_id) return;
+    setMessageLoading(true);
+    try {
+      const thread = await createThread(dbUserId, task.tasker_id, task.id);
+      const name = tasker ? `${tasker.first_name ?? ""} ${tasker.last_name ?? ""}`.trim() || "Worker" : "Worker";
+      navigation.navigate("Chat", { threadId: thread.id, otherUserName: name, taskId: task.id });
+    } catch {
+      Alert.alert("Error", "Could not open conversation");
+    } finally {
+      setMessageLoading(false);
     }
   };
 
@@ -221,16 +239,12 @@ export function AppointmentDetailScreen() {
                 ))}
               </View>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.messageLink}
-              onPress={() =>
-                navigation.navigate("Chat", {
-                  threadId: task.id,
-                  otherUserName: workerName,
-                })
-              }
+              onPress={handleMessage}
+              disabled={messageLoading}
             >
-              <Text style={styles.messageLinkText}>Message</Text>
+              <Text style={styles.messageLinkText}>{messageLoading ? "Opening..." : "Message"}</Text>
               <Ionicons name="chevron-forward" size={16} color={colors.brandGreen} />
             </TouchableOpacity>
           </View>
@@ -349,12 +363,8 @@ export function AppointmentDetailScreen() {
         {(task.status === "accepted" || task.status === "in_progress") && (
           <Button
             label="Message Worker"
-            onPress={() =>
-              navigation.navigate("Chat", {
-                threadId: task.id,
-                otherUserName: workerName,
-              })
-            }
+            onPress={handleMessage}
+            loading={messageLoading}
             fullWidth
           />
         )}

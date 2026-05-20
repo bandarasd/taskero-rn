@@ -52,7 +52,7 @@ export function MessagesScreen() {
                 const otherName = other
                   ? `${other.first_name ?? ""} ${other.last_name ?? ""}`.trim()
                   : "User";
-                navigation.navigate("Chat", { threadId: item.id, otherUserName: otherName });
+                navigation.navigate("Chat", { threadId: item.id, otherUserName: otherName, taskId: item.task_id ?? undefined });
               }}
             />
           )}

@@ -186,6 +186,8 @@ export type APIChatMessage = {
   thread_id: string;
   sender_id: string;
   body: string;
+  message_type: 'text' | 'booking_ref';
+  ref_task_id?: string | null;
   created_at: string;
   sender?: ApiUser | null;
 };
@@ -213,6 +215,6 @@ export type APINotification = {
   body: string;
   is_read: boolean;
   type?: string | null;
-  reference_id?: string | null;
+  data?: Record<string, unknown> | null;
   created_at?: string;
 };

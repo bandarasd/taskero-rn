@@ -2,7 +2,7 @@ import React from "react";
 import { PlaceholderScreen } from "../../components/PlaceholderScreen";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { Text } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { WorkerDashboardScreen } from "../../screens/worker/WorkerDashboardScreen";
 import { WorkerJobsScreen } from "../../screens/worker/WorkerJobsScreen";
@@ -23,6 +23,7 @@ import { SecuritySettingsScreen } from "../../screens/SecuritySettingsScreen";
 import { Ionicons } from "@expo/vector-icons";
 import type { WorkerStackParamList } from "../stacks/WorkerStack";
 import { colors } from "../../theme/colors";
+import { useUnreadMessageCount } from "../../hooks/useUnreadMessageCount";
 
 // ─── Shared screens across worker tabs ───────────────────────────────────────
 
@@ -124,7 +125,23 @@ const LABELS: Record<keyof WorkerTabParamList, string> = {
   ProfileTab: "Profile",
 };
 
+const styles = StyleSheet.create({
+  dot: {
+    position: "absolute",
+    top: 0,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#EF4444",
+    borderWidth: 1.5,
+    borderColor: "#fff",
+  },
+});
+
 export function WorkerTabs() {
+  const unreadCount = useUnreadMessageCount();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -149,12 +166,18 @@ export function WorkerTabs() {
           fontWeight: "600",
           marginTop: 2,
         },
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarIcon: ({ focused, color }) => {
           const iconName = focused
             ? ICONS[route.name as keyof WorkerTabParamList].active
             : ICONS[route.name as keyof WorkerTabParamList].inactive;
-          
-          return <Ionicons name={iconName} size={26} color={color} />;
+          const showDot = route.name === "MessagesTab" && unreadCount > 0;
+
+          return (
+            <View>
+              <Ionicons name={iconName} size={26} color={color} />
+              {showDot && <View style={styles.dot} />}
+            </View>
+          );
         },
       })}
     >

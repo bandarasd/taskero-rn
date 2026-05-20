@@ -32,7 +32,7 @@ export type WorkerStackParamList = {
   WorkerJobDetail: { taskId: string };
 
   // Chat
-  WorkerChat: { threadId: string; otherUserName: string };
+  WorkerChat: { threadId: string; otherUserName: string; taskId?: string };
 
   // Profile sub-screens
   WorkerServices: undefined;

@@ -9,60 +9,103 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useRoute, RouteProp } from "@react-navigation/native";
-import { getChatMessages, sendMessage } from "../services/chatService";
+import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { getChatMessages, sendMessage, markMessagesRead } from "../services/chatService";
+import { getTaskById } from "../services/taskService";
 import { MessageBubble } from "../components/chat/MessageBubble";
+import { BookingCard } from "../components/chat/BookingCard";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { colors } from "../theme/colors";
 import { radius, spacing } from "../theme/spacing";
 import { useAuth } from "../store/authStore";
-import { APIChatMessage } from "../types";
+import { env } from "../services/env";
+import { APIChatMessage, APITask } from "../types";
 import type { CustomerStackParamList } from "../navigation/stacks/CustomerStack";
 
 type RouteProps = RouteProp<CustomerStackParamList, "Chat">;
+type Nav = NativeStackNavigationProp<CustomerStackParamList>;
+
+function mapMessage(m: any): APIChatMessage {
+  return { ...m, body: m.message_text ?? m.body ?? "", message_type: m.message_type ?? 'text' };
+}
 
 export function ChatScreen() {
   const route = useRoute<RouteProps>();
-  const { threadId } = route.params;
+  const navigation = useNavigation<Nav>();
+  const { threadId, taskId } = route.params;
   const { dbUserId } = useAuth();
+  const qc = useQueryClient();
   const [messages, setMessages] = useState<APIChatMessage[]>([]);
+  const [taskCache, setTaskCache] = useState<Record<string, APITask>>({});
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const mountedRef = useRef(true);
-
-  const loadMessages = async () => {
-    try {
-      const data = await getChatMessages(threadId);
-      if (mountedRef.current) setMessages(data);
-    } catch {
-      // ignore polling errors
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
+  const fetchTask = (id: string) => {
+    if (taskCache[id]) return;
+    getTaskById(id).then((t) => setTaskCache((prev) => ({ ...prev, [id]: t }))).catch(() => {});
   };
 
   useEffect(() => {
-    mountedRef.current = true;
-    loadMessages();
-    pollRef.current = setInterval(loadMessages, 4000);
+    let mounted = true;
+
+    getChatMessages(threadId)
+      .then((data) => {
+        if (!mounted) return;
+        setMessages(data);
+        setLoading(false);
+        // Pre-fetch task data for any existing booking_ref messages
+        data.forEach((m) => { if (m.message_type === 'booking_ref' && m.ref_task_id) fetchTask(m.ref_task_id); });
+      })
+      .catch(() => { if (mounted) setLoading(false); });
+
+    if (dbUserId) {
+      markMessagesRead(threadId, dbUserId)
+        .then(() => qc.invalidateQueries({ queryKey: ["threads", dbUserId] }))
+        .catch(() => {});
+    }
+
+    const ws = new WebSocket(`${env.wsBaseUrl}/ws`);
+
+    ws.onopen = () => { ws.send(JSON.stringify({ action: "subscribe", thread_id: threadId })); };
+
+    ws.onmessage = (event) => {
+      if (!mounted) return;
+      try {
+        const msg = mapMessage(JSON.parse(event.data));
+        if (msg.message_type === 'booking_ref' && msg.ref_task_id) fetchTask(msg.ref_task_id);
+        setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
+        flatListRef.current?.scrollToEnd({ animated: true });
+      } catch {}
+    };
+
     return () => {
-      mountedRef.current = false;
-      if (pollRef.current) clearInterval(pollRef.current);
+      mounted = false;
+      ws.close();
     };
   }, [threadId]);
 
   const handleSend = async () => {
     const trimmed = text.trim();
-    if (!trimmed || sending) return;
+    if (!trimmed || sending || !dbUserId) return;
     setText("");
     setSending(true);
     try {
-      const msg = await sendMessage(threadId, trimmed);
-      setMessages((prev) => [...prev, msg]);
+      // Send booking card first if this task hasn't been referenced yet in this thread
+      if (taskId && !messages.some((m) => m.message_type === 'booking_ref' && m.ref_task_id === taskId)) {
+        const cardMsg = await sendMessage(threadId, '', dbUserId, {
+          messageType: 'booking_ref',
+          refTaskId: taskId,
+        });
+        if (taskId && !taskCache[taskId]) fetchTask(taskId);
+        setMessages((prev) => prev.some((m) => m.id === cardMsg.id) ? prev : [...prev, cardMsg]);
+      }
+
+      const msg = await sendMessage(threadId, trimmed, dbUserId);
+      setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
       flatListRef.current?.scrollToEnd({ animated: true });
     } catch {
       setText(trimmed);
@@ -85,9 +128,19 @@ export function ChatScreen() {
         keyExtractor={(m) => m.id}
         contentContainerStyle={styles.list}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-        renderItem={({ item }) => (
-          <MessageBubble message={item} isMine={item.sender_id === dbUserId} />
-        )}
+        renderItem={({ item }) => {
+          if (item.message_type === 'booking_ref' && item.ref_task_id) {
+            const taskData = taskCache[item.ref_task_id];
+            if (!taskData) return <View style={styles.cardPlaceholder} />;
+            return (
+              <BookingCard
+                task={taskData}
+                onPress={() => navigation.navigate("AppointmentDetail", { taskId: taskData.id })}
+              />
+            );
+          }
+          return <MessageBubble message={item} isMine={item.sender_id === dbUserId} />;
+        }}
       />
       <View style={styles.inputBar}>
         <TextInput
@@ -114,6 +167,7 @@ export function ChatScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   list: { paddingVertical: 12, paddingBottom: 8 },
+  cardPlaceholder: { height: 80, marginHorizontal: spacing.md, marginVertical: 4 },
   inputBar: {
     flexDirection: "row",
     alignItems: "flex-end",

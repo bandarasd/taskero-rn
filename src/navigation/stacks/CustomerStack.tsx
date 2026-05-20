@@ -40,7 +40,7 @@ export type CustomerStackParamList = {
   AddReview: { taskId?: string; gigId?: string; taskerId: string };
 
   // Chat
-  Chat: { threadId: string; otherUserName: string };
+  Chat: { threadId: string; otherUserName: string; taskId?: string };
 
   // Profile sub-screens
   EditProfile: undefined;

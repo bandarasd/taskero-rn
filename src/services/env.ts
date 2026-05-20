@@ -21,4 +21,5 @@ export const env = {
     androidPackageName: process.env.EXPO_PUBLIC_FIREBASE_ANDROID_PACKAGE_NAME ?? "",
   },
   stripePublishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "",
+  wsBaseUrl: (process.env.EXPO_PUBLIC_API_BASE_URL ?? "").replace(/^http/, "ws"),
 };
