@@ -13,9 +13,10 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
-import { updateUser, getUserById } from "../services/userService";
+import * as ImagePicker from "expo-image-picker";
+import { updateUser, getUserById, uploadAvatar } from "../services/userService";
 import { Input } from "../components/common/Input";
 import { Button } from "../components/common/Button";
 import { Avatar } from "../components/common/Avatar";
@@ -26,6 +27,7 @@ import { useAuth } from "../store/authStore";
 export function EditProfileScreen() {
   const { user, dbUserId } = useAuth();
   const navigation = useNavigation();
+  const queryClient = useQueryClient();
 
   const { data: dbUser } = useQuery({
     queryKey: ["user-profile", dbUserId],
@@ -38,6 +40,7 @@ export function EditProfileScreen() {
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (dbUser) {
@@ -47,6 +50,30 @@ export function EditProfileScreen() {
       setCity(dbUser.city || "");
     }
   }, [dbUser]);
+
+  const handleAvatarPress = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission required", "Allow photo library access to change your avatar.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !dbUserId) return;
+    setUploading(true);
+    try {
+      await uploadAvatar(dbUserId, result.assets[0].uri);
+      queryClient.invalidateQueries({ queryKey: ["user-profile", dbUserId] });
+    } catch {
+      Alert.alert("Upload failed", "Could not update your avatar. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!dbUserId) return;
@@ -84,16 +111,26 @@ export function EditProfileScreen() {
         >
           {/* Avatar Card */}
           <View style={styles.avatarCard}>
-            <View style={styles.avatarWrapper}>
+            <TouchableOpacity
+              style={styles.avatarWrapper}
+              onPress={handleAvatarPress}
+              disabled={uploading}
+            >
               <Avatar
                 uri={dbUser?.avatar_url ?? user?.photoURL}
                 name={displayName}
                 size={96}
               />
-              <TouchableOpacity style={styles.cameraBadge}>
-                <Ionicons name="camera" size={16} color="#fff" />
-              </TouchableOpacity>
-            </View>
+              {uploading ? (
+                <View style={styles.avatarOverlay}>
+                  <ActivityIndicator color="#fff" />
+                </View>
+              ) : (
+                <View style={styles.cameraBadge}>
+                  <Ionicons name="camera" size={16} color="#fff" />
+                </View>
+              )}
+            </TouchableOpacity>
             <Text style={styles.userName}>{displayName}</Text>
             <Text style={styles.tapHint}>Tap to change photo</Text>
           </View>
@@ -200,6 +237,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 2,
     borderColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.45)",
     alignItems: "center",
     justifyContent: "center",
   },

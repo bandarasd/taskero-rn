@@ -1,4 +1,4 @@
-import { apiRequest } from "./apiClient";
+import { apiRequest, apiUpload } from "./apiClient";
 import { ApiUser } from "../types";
 
 export type { ApiUser };
@@ -30,4 +30,14 @@ export async function updateUser(id: string, payload: Partial<ApiUser>) {
     method: "PUT",
     body: payload,
   });
+}
+
+export async function uploadAvatar(userId: string, imageUri: string): Promise<ApiUser> {
+  const formData = new FormData();
+  formData.append("profilePicture", {
+    uri: imageUri,
+    type: "image/jpeg",
+    name: "avatar.jpg",
+  } as any);
+  return apiUpload<ApiUser>(`/users/${encodeURIComponent(userId)}/upload-avatar`, formData);
 }
