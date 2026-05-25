@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { getCustomerTasks } from "../services/taskService";
@@ -15,24 +15,29 @@ import { Animated } from "react-native";
 
 type Nav = NativeStackNavigationProp<CustomerStackParamList>;
 
-const ACTIVE_STATUSES = ["pending", "quoted", "accepted", "in_progress"];
+const ACTIVE_STATUSES = ["pending", "quoted", "accepted", "in_progress", "payment_pending"];
 const PAST_STATUSES = ["completed", "canceled", "declined"];
 
 export function BookingsScreen() {
   const { dbUserId } = useAuth();
   const navigation = useNavigation<Nav>();
+  const qc = useQueryClient();
   const [tab, setTab] = useState<"active" | "past">("active");
   const [underlineAnim] = useState(new Animated.Value(0));
 
-  const { data: tasks, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ["tasks", "customer", dbUserId],
-    queryFn: () => getCustomerTasks(dbUserId!),
+    queryFn: ({ pageParam = 1 }) => getCustomerTasks(dbUserId!, pageParam, 20),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
     enabled: !!dbUserId,
   });
 
-  const activeCount = (tasks ?? []).filter((t) => ACTIVE_STATUSES.includes(t.status)).length;
+  const tasks = data?.pages.flatMap((p) => p.data) ?? [];
 
-  const filtered = (tasks ?? []).filter((t) =>
+  const activeCount = tasks.filter((t) => ACTIVE_STATUSES.includes(t.status)).length;
+
+  const filtered = tasks.filter((t) =>
     tab === "active" ? ACTIVE_STATUSES.includes(t.status) : PAST_STATUSES.includes(t.status)
   );
 
@@ -83,11 +88,20 @@ export function BookingsScreen() {
       {isLoading ? (
         <LoadingSpinner />
       ) : (
-        <ScrollView
+        <FlatList
+          data={filtered}
+          keyExtractor={(t) => t.id}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
-        >
-          {filtered.length === 0 ? (
+          refreshControl={
+            <RefreshControl
+              refreshing={isLoading}
+              onRefresh={() => { qc.removeQueries({ queryKey: ["tasks", "customer", dbUserId] }); refetch(); }}
+            />
+          }
+          onEndReached={() => { if (hasNextPage) fetchNextPage(); }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={colors.brandGreen} style={{ margin: 16 }} /> : null}
+          ListEmptyComponent={
             <EmptyState
               icon={tab === "active" ? "📋" : "🗂️"}
               title={tab === "active" ? "No active bookings" : "No past bookings"}
@@ -97,16 +111,14 @@ export function BookingsScreen() {
                   : "Completed and cancelled jobs will appear here."
               }
             />
-          ) : (
-            filtered.map((task) => (
-              <BookingCard
-                key={task.id}
-                task={task}
-                onPress={() => navigation.navigate("AppointmentDetail", { taskId: task.id })}
-              />
-            ))
+          }
+          renderItem={({ item: task }) => (
+            <BookingCard
+              task={task}
+              onPress={() => navigation.navigate("AppointmentDetail", { taskId: task.id })}
+            />
           )}
-        </ScrollView>
+        />
       )}
     </View>
   );

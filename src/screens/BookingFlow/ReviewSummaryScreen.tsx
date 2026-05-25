@@ -23,7 +23,7 @@ export function ReviewSummaryScreen() {
   const navigation = useNavigation<Nav>();
   const {
     gigId, taskerId, address, latitude, longitude,
-    scheduledAt, category, details, basePrice, notes,
+    scheduledAt, category, details, basePrice, notes, imageUris,
   } = route.params;
   const toastRef = useRef<BookingToastHandle>(null);
 
@@ -39,7 +39,7 @@ export function ReviewSummaryScreen() {
   const handleConfirm = () => {
     navigation.navigate("Payment", {
       gigId, taskerId, address, latitude, longitude,
-      scheduledAt, category, details, basePrice, notes,
+      scheduledAt, category, details, basePrice, notes, imageUris,
     });
   };
 

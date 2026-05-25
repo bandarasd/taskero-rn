@@ -1,5 +1,16 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, Text, View, Pressable } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
@@ -13,15 +24,16 @@ import type { BookingFlowParamList } from "./BookingFlowNavigator";
 import { ServiceCategory } from "../../types";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as ImagePicker from "expo-image-picker";
 
 type RouteProps = RouteProp<BookingFlowParamList, "ServiceSpecific">;
 type Nav = NativeStackNavigationProp<BookingFlowParamList>;
 
-type Field = { 
-  key: string; 
-  label: string; 
-  placeholder: string; 
-  helper?: string; 
+type Field = {
+  key: string;
+  label: string;
+  placeholder: string;
+  helper?: string;
   type: "text" | "number-chips" | "options-chips";
   options?: string[];
 };
@@ -49,6 +61,12 @@ const CATEGORY_FIELDS: Record<ServiceCategory | string, Field[]> = {
     { key: "issue", label: "Issue description", placeholder: "e.g. Outlet not working", type: "text" },
     { key: "fixture_count", label: "Number of fixtures", placeholder: "e.g. 4", type: "number-chips" },
   ],
+  Moving: [
+    { key: "property_size", label: "Property size", placeholder: "e.g. 2-bedroom", type: "options-chips", options: ["Studio", "1 Bedroom", "2 Bedrooms", "3+ Bedrooms"] },
+    { key: "floor", label: "Floor (from)", placeholder: "e.g. 3", type: "number-chips" },
+    { key: "has_elevator", label: "Elevator available", placeholder: "", type: "options-chips", options: ["Yes", "No"] },
+    { key: "packing_needed", label: "Packing needed", placeholder: "", type: "options-chips", options: ["Yes", "No"] },
+  ],
   General: [
     { key: "description", label: "Job description", placeholder: "Describe what you need done", type: "text" },
   ],
@@ -60,11 +78,17 @@ const CATEGORY_ICONS: Record<string, string> = {
   Moving: "📦", Repairing: "🛠️", General: "📋",
 };
 
+const MAX_NOTES = 300;
+const MAX_IMAGES = 4;
+
 export function ServiceSpecificBookingScreen() {
   const route = useRoute<RouteProps>();
   const navigation = useNavigation<Nav>();
   const { gigId, taskerId, address, latitude, longitude, scheduledAt, category } = route.params;
   const [values, setValues] = useState<Record<string, string>>({});
+  const [notes, setNotes] = useState("");
+  const [images, setImages] = useState<string[]>([]);
+  const [pickingImage, setPickingImage] = useState(false);
 
   const { data: gig } = useQuery({
     queryKey: ["gig", gigId],
@@ -75,6 +99,37 @@ export function ServiceSpecificBookingScreen() {
   const icon = CATEGORY_ICONS[category] ?? "📋";
 
   const setValue = (key: string, val: string) => setValues((prev) => ({ ...prev, [key]: val }));
+
+  const pickImage = async () => {
+    if (images.length >= MAX_IMAGES) {
+      Alert.alert("Limit reached", `You can upload up to ${MAX_IMAGES} images.`);
+      return;
+    }
+    setPickingImage(true);
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission required", "Please allow access to your photo library.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        selectionLimit: MAX_IMAGES - images.length,
+        quality: 0.8,
+      });
+      if (!result.canceled) {
+        const uris = result.assets.map((a) => a.uri);
+        setImages((prev) => [...prev, ...uris].slice(0, MAX_IMAGES));
+      }
+    } finally {
+      setPickingImage(false);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const renderField = (field: Field) => {
     switch (field.type) {
@@ -133,17 +188,17 @@ export function ServiceSpecificBookingScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <SafeAreaView edges={["top"]} style={styles.header}>
         <View style={styles.headerContent}>
           <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </Pressable>
-          <BookingStepDots currentStep={4} />
+          <BookingStepDots currentStep={3} />
         </View>
       </SafeAreaView>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.titleSection}>
           <Text style={styles.emoji}>{icon}</Text>
           <Text style={styles.title}>{category} details</Text>
@@ -152,6 +207,50 @@ export function ServiceSpecificBookingScreen() {
 
         <View style={styles.form}>
           {fields.map(renderField)}
+        </View>
+
+        {/* Job description + photos */}
+        <View style={styles.descSection}>
+          <Text style={styles.sectionLabel}>Job description</Text>
+          <Input
+            placeholder="e.g. Use the back entrance, dog is friendly, specific instructions..."
+            value={notes}
+            onChangeText={(t) => setNotes(t.slice(0, MAX_NOTES))}
+            multiline
+            numberOfLines={4}
+            style={styles.notesInput}
+          />
+          <Text style={styles.charCount}>{notes.length}/{MAX_NOTES}</Text>
+
+          <View style={styles.photosRow}>
+            <View style={styles.photosLabelRow}>
+              <Text style={styles.sectionLabel}>Photos</Text>
+              <Text style={styles.photoCount}>{images.length}/{MAX_IMAGES}</Text>
+            </View>
+            <Text style={styles.photosHint}>Add photos to help describe the job (optional)</Text>
+            <View style={styles.imagesGrid}>
+              {images.map((uri, index) => (
+                <View key={index} style={styles.imageThumbWrap}>
+                  <Image source={{ uri }} style={styles.imageThumb} />
+                  <Pressable style={styles.imageRemoveBtn} onPress={() => removeImage(index)}>
+                    <Ionicons name="close-circle" size={22} color={colors.danger} />
+                  </Pressable>
+                </View>
+              ))}
+              {images.length < MAX_IMAGES && (
+                <Pressable style={styles.addImageBtn} onPress={pickImage} disabled={pickingImage}>
+                  {pickingImage ? (
+                    <ActivityIndicator size="small" color={colors.brandGreen} />
+                  ) : (
+                    <>
+                      <Ionicons name="camera-outline" size={28} color={colors.brandGreen} />
+                      <Text style={styles.addImageText}>Add photo</Text>
+                    </>
+                  )}
+                </Pressable>
+              )}
+            </View>
+          </View>
         </View>
 
         <View style={styles.infoBanner}>
@@ -173,19 +272,18 @@ export function ServiceSpecificBookingScreen() {
             category,
             details: values,
             basePrice: gig?.base_price ?? 0,
+            notes: notes || undefined,
+            imageUris: images.length > 0 ? images : undefined,
           })
         }
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.card },
-  header: {
-    backgroundColor: colors.card,
-    zIndex: 10,
-  },
+  header: { backgroundColor: colors.card, zIndex: 10 },
   headerContent: {
     height: 56,
     flexDirection: "row",
@@ -201,29 +299,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   content: { padding: spacing.lg, paddingBottom: 120 },
-  titleSection: {
-    marginBottom: spacing.xl,
-  },
-  emoji: {
-    fontSize: 40,
-    marginBottom: spacing.sm,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: colors.text,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: colors.subtext,
-    marginTop: 4,
-  },
-  form: {
-    marginBottom: spacing.lg,
-  },
-  fieldContainer: {
-    marginBottom: spacing.lg,
-  },
+  titleSection: { marginBottom: spacing.xl },
+  emoji: { fontSize: 40, marginBottom: spacing.sm },
+  title: { fontSize: 24, fontWeight: "800", color: colors.text },
+  subtitle: { fontSize: 15, color: colors.subtext, marginTop: 4 },
+  form: { marginBottom: spacing.lg },
+  fieldContainer: { marginBottom: spacing.lg },
   fieldLabel: {
     fontSize: 14,
     fontWeight: "700",
@@ -262,14 +343,68 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandGreen,
     borderColor: colors.brandGreen,
   },
-  chipText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: colors.text,
+  chipText: { fontSize: 15, fontWeight: "600", color: colors.text },
+  selectedChipText: { color: "#FFFFFF" },
+
+  descSection: { marginBottom: spacing.lg },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.subtext,
+    textTransform: "uppercase",
+    marginBottom: spacing.sm,
   },
-  selectedChipText: {
-    color: "#FFFFFF",
+  notesInput: { minHeight: 100, textAlignVertical: "top" },
+  charCount: {
+    fontSize: 11,
+    color: colors.placeholder,
+    textAlign: "right",
+    marginTop: 4,
+    marginBottom: spacing.lg,
   },
+  photosRow: {},
+  photosLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  photoCount: { fontSize: 13, color: colors.subtext, fontWeight: "500" },
+  photosHint: { fontSize: 13, color: colors.subtext, marginBottom: spacing.md },
+  imagesGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  imageThumbWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: radius.md,
+    overflow: "visible",
+    position: "relative",
+  },
+  imageThumb: {
+    width: 88,
+    height: 88,
+    borderRadius: radius.md,
+    backgroundColor: colors.borderLight,
+  },
+  imageRemoveBtn: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+    backgroundColor: colors.card,
+    borderRadius: 11,
+  },
+  addImageBtn: {
+    width: 88,
+    height: 88,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.brandGreen,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    backgroundColor: colors.brandGreenLight,
+  },
+  addImageText: { fontSize: 12, color: colors.brandGreen, fontWeight: "600" },
   infoBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -278,10 +413,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     marginTop: spacing.md,
   },
-  infoText: {
-    fontSize: 13,
-    color: colors.subtext,
-    marginLeft: spacing.sm,
-    flex: 1,
-  },
+  infoText: { fontSize: 13, color: colors.subtext, marginLeft: spacing.sm, flex: 1 },
 });

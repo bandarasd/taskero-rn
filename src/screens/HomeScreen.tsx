@@ -13,7 +13,7 @@ import {
   StatusBar,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
@@ -83,18 +83,24 @@ export function HomeScreen() {
     qc.invalidateQueries({ queryKey: ["gigs"] });
   };
 
-  const { data: gigs, isLoading, refetch } = useQuery({
+  const { data: gigsData, isLoading, refetch } = useInfiniteQuery({
     queryKey: ["gigs"],
-    queryFn: getGigs,
+    queryFn: ({ pageParam = 1 }) => getGigs(pageParam, 15),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
   });
+  const gigs = gigsData?.pages.flatMap((p) => p.data) ?? [];
 
-  const { data: notifications } = useQuery({
+  const { data: notifData } = useInfiniteQuery({
     queryKey: ["notifications", dbUserId],
-    queryFn: () => getNotifications(dbUserId!),
+    queryFn: ({ pageParam = 1 }) => getNotifications(dbUserId!, pageParam, 20),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
     enabled: !!dbUserId,
   });
+  const notifications = notifData?.pages.flatMap((p) => p.data) ?? [];
 
-  const unreadCount = notifications?.filter((n) => !n.is_read).length ?? 0;
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   const handleSearch = useCallback(async (text: string) => {
     setSearch(text);
@@ -105,8 +111,8 @@ export function HomeScreen() {
     }
     setSearching(true);
     try {
-      const results = await searchGigs(text.trim());
-      setSearchResults(results);
+      const res = await searchGigs(text.trim());
+      setSearchResults(res.data);
     } catch {
       setSearchResults([]);
     } finally {
@@ -352,13 +358,13 @@ const styles = StyleSheet.create({
   },
   bellBadge: {
     position: "absolute",
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: 5,
+    right: 5,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: "#EF4444",
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: "#FFFFFF",
   },
 

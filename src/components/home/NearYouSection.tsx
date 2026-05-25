@@ -29,22 +29,19 @@ export function NearYouSection({ onGigPress }: NearYouSectionProps) {
 
       setHasLocation(true);
       const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const allGigs = await getGigs();
-      
-      // Simulating "Near You" by checking service_area or just picking a subset
-      // In a real app, we would use a geo-query or filter by distance
+      const res = await getGigs(1, 15);
+      const allGigs = res.data;
+
       const filtered = allGigs.filter(gig => {
-        if (!gig.service_area) return true; // Show if no area specified?
-        
-        // Simple distance check (not accurate but good for demo)
+        if (!gig.service_area) return true;
         const dist = Math.sqrt(
           Math.pow(gig.service_area.latitude - location.coords.latitude, 2) +
           Math.pow(gig.service_area.longitude - location.coords.longitude, 2)
         );
-        return dist < 0.1; // roughly 10km
+        return dist < 0.1;
       });
 
-      setGigs(filtered.length > 0 ? filtered : allGigs.slice(2, 6)); // Fallback for demo
+      setGigs(filtered.length > 0 ? filtered : allGigs.slice(2, 6));
     } catch (error) {
       console.error("Error loading near you gigs:", error);
     } finally {

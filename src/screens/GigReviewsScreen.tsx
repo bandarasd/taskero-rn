@@ -1,6 +1,6 @@
 import React from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from "react-native";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { getGigReviews } from "../services/reviewService";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
@@ -17,10 +17,14 @@ export function GigReviewsScreen() {
   const route = useRoute<RouteProps>();
   const { gigId } = route.params;
 
-  const { data: reviews, isLoading } = useQuery({
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ["reviews", "gig", gigId],
-    queryFn: () => getGigReviews(gigId),
+    queryFn: ({ pageParam = 1 }) => getGigReviews(gigId, pageParam, 10),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
   });
+
+  const reviews = data?.pages.flatMap((p) => p.data) ?? [];
 
   if (isLoading) return <LoadingSpinner />;
 
@@ -30,6 +34,9 @@ export function GigReviewsScreen() {
         data={reviews}
         keyExtractor={(r) => r.id}
         contentContainerStyle={styles.list}
+        onEndReached={() => { if (hasNextPage) fetchNextPage(); }}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={colors.brandGreen} style={{ margin: 16 }} /> : null}
         ListEmptyComponent={<EmptyState icon="⭐" title="No reviews yet" />}
         renderItem={({ item: r }) => {
           const name = r.reviewer

@@ -1,6 +1,6 @@
 import React from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { getGigsByCategory } from "../services/gigService";
@@ -18,44 +18,56 @@ type Nav = NativeStackNavigationProp<CustomerStackParamList>;
 export function CategoryServicesScreen() {
   const route = useRoute<RouteProps>();
   const navigation = useNavigation<Nav>();
+  const qc = useQueryClient();
   const { category } = route.params;
 
-  const { data: gigs, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ["gigs", "category", category],
-    queryFn: () => getGigsByCategory(category as ServiceCategory),
+    queryFn: ({ pageParam = 1 }) => getGigsByCategory(category as ServiceCategory, pageParam, 15),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
   });
+
+  const gigs = data?.pages.flatMap((p) => p.data) ?? [];
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.icon}>{CATEGORY_ICONS[category as ServiceCategory] ?? "🛠️"}</Text>
         <Text style={styles.title}>{category}</Text>
-        <Text style={styles.count}>{gigs?.length ?? 0} services</Text>
+        <Text style={styles.count}>{gigs.length} services</Text>
       </View>
 
       {isLoading ? (
         <LoadingSpinner />
       ) : (
-        <ScrollView
+        <FlatList
+          data={gigs}
+          keyExtractor={(g) => g.id}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
-        >
-          {!gigs || gigs.length === 0 ? (
+          refreshControl={
+            <RefreshControl
+              refreshing={isLoading}
+              onRefresh={() => { qc.removeQueries({ queryKey: ["gigs", "category", category] }); refetch(); }}
+            />
+          }
+          onEndReached={() => { if (hasNextPage) fetchNextPage(); }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={colors.brandGreen} style={{ margin: 16 }} /> : null}
+          ListEmptyComponent={
             <EmptyState
               icon="🔍"
               title="No services yet"
               message={`No ${category} services available in your area yet.`}
             />
-          ) : (
-            gigs.map((g) => (
-              <GigListItem
-                key={g.id}
-                gig={g}
-                onPress={() => navigation.navigate("ServiceDetail", { gigId: g.id })}
-              />
-            ))
+          }
+          renderItem={({ item: g }) => (
+            <GigListItem
+              gig={g}
+              onPress={() => navigation.navigate("ServiceDetail", { gigId: g.id })}
+            />
           )}
-        </ScrollView>
+        />
       )}
     </View>
   );

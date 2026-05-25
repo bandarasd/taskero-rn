@@ -1,5 +1,4 @@
 import React from "react";
-import { PlaceholderScreen } from "../../components/PlaceholderScreen";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StyleSheet, View } from "react-native";
@@ -22,10 +21,14 @@ import { HelpCenterScreen } from "../../screens/HelpCenterScreen";
 import { PrivacyPolicyScreen } from "../../screens/PrivacyPolicyScreen";
 import { SecuritySettingsScreen } from "../../screens/SecuritySettingsScreen";
 import { BookingFlowNavigator } from "../../screens/BookingFlow/BookingFlowNavigator";
+import { ClientPaymentMethodsScreen } from "../../screens/ClientPaymentMethodsScreen";
+import { MyReviewsScreen } from "../../screens/MyReviewsScreen";
 import { Ionicons } from "@expo/vector-icons";
 import type { CustomerStackParamList } from "../stacks/CustomerStack";
 import { colors } from "../../theme/colors";
 import { useUnreadMessageCount } from "../../hooks/useUnreadMessageCount";
+import { useUnreadBookingNotificationCount } from "../../hooks/useUnreadBookingNotificationCount";
+import { CustomerDelayResponseScreen } from "../../screens/CustomerDelayResponseScreen";
 
 // ─── Shared stack screens (used across multiple tabs) ─────────────────────────
 
@@ -43,8 +46,9 @@ const sharedScreens = (Stack: ReturnType<typeof createNativeStackNavigator<Custo
     <Stack.Screen name="HelpCenter" component={HelpCenterScreen} options={{ title: "Help Center" }} />
     <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: "Privacy Policy" }} />
     <Stack.Screen name="BookingFlow" component={BookingFlowNavigator} options={{ headerShown: false }} />
-    <Stack.Screen name="ClientPaymentMethods" component={PlaceholderScreen("Payment Methods")} options={{ title: "Payment Methods" }} />
-    <Stack.Screen name="MyReviews" component={PlaceholderScreen("My Reviews")} options={{ title: "My Reviews" }} />
+    <Stack.Screen name="ClientPaymentMethods" component={ClientPaymentMethodsScreen} options={{ title: "Payment Methods" }} />
+    <Stack.Screen name="MyReviews" component={MyReviewsScreen} options={{ title: "My Reviews" }} />
+    <Stack.Screen name="CustomerDelayResponse" component={CustomerDelayResponseScreen} options={{ headerShown: false }} />
   </>
 );
 
@@ -105,13 +109,13 @@ function ProfileStackNav() {
 const styles = StyleSheet.create({
   dot: {
     position: "absolute",
-    top: 0,
-    right: -2,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: -2,
+    right: -4,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: "#EF4444",
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: "#fff",
   },
 });
@@ -140,6 +144,7 @@ const LABELS: Record<keyof CustomerTabParamList, string> = {
 
 export function CustomerTabs() {
   const unreadCount = useUnreadMessageCount();
+  const bookingNotifCount = useUnreadBookingNotificationCount();
 
   return (
     <Tab.Navigator
@@ -169,7 +174,9 @@ export function CustomerTabs() {
           const iconName = focused
             ? TAB_ICONS[route.name as keyof CustomerTabParamList].active
             : TAB_ICONS[route.name as keyof CustomerTabParamList].inactive;
-          const showDot = route.name === "MessagesTab" && unreadCount > 0;
+          const showDot =
+            (route.name === "MessagesTab" && unreadCount > 0) ||
+            (route.name === "BookingsTab" && bookingNotifCount > 0);
 
           return (
             <View>

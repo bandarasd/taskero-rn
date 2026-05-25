@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useQuery } from "@tanstack/react-query";
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
 import { getWorkerTasks } from "../../services/taskService";
 import { WorkerJobCard } from "../../components/worker/WorkerJobCard";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
@@ -17,22 +17,27 @@ type Tab = "pending" | "active" | "completed";
 
 const TAB_FILTERS: Record<Tab, string[]> = {
   pending: ["pending", "quoted"],
-  active: ["accepted", "in_progress"],
+  active: ["accepted", "in_progress", "payment_pending"],
   completed: ["completed", "canceled", "declined"],
 };
 
 export function WorkerJobsScreen() {
   const { dbUserId } = useAuth();
   const navigation = useNavigation<Nav>();
-  const [tab, setTab] = useState<Tab>("pending");
+  const qc = useQueryClient();
+  const route = useRoute<NativeStackScreenProps<WorkerStackParamList, "WorkerJobs">["route"]>();
+  const [tab, setTab] = useState<Tab>((route.params as any)?.initialTab ?? "pending");
 
-  const { data: tasks, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ["worker-tasks", dbUserId],
-    queryFn: () => getWorkerTasks(dbUserId!),
+    queryFn: ({ pageParam = 1 }) => getWorkerTasks(dbUserId!, pageParam, 20),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
     enabled: !!dbUserId,
   });
 
-  const filtered = (tasks ?? []).filter((t) => TAB_FILTERS[tab].includes(t.status));
+  const tasks = data?.pages.flatMap((p) => p.data) ?? [];
+  const filtered = tasks.filter((t) => TAB_FILTERS[tab].includes(t.status));
 
   return (
     <View style={styles.container}>
@@ -40,7 +45,7 @@ export function WorkerJobsScreen() {
         <Text style={styles.heading}>Jobs</Text>
         <View style={styles.tabs}>
           {(["pending", "active", "completed"] as Tab[]).map((t) => {
-            const count = (tasks ?? []).filter((task) => TAB_FILTERS[t].includes(task.status)).length;
+            const count = tasks.filter((task) => TAB_FILTERS[t].includes(task.status)).length;
             return (
               <Pressable key={t} style={[styles.tab, tab === t && styles.tabActive]} onPress={() => setTab(t)}>
                 <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
@@ -56,22 +61,35 @@ export function WorkerJobsScreen() {
       {isLoading ? (
         <LoadingSpinner />
       ) : (
-        <ScrollView
+        <FlatList
+          data={filtered}
+          keyExtractor={(t) => t.id}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
-        >
-          {filtered.length === 0 ? (
-            <EmptyState icon="📋" title={`No ${tab} jobs`} />
-          ) : (
-            filtered.map((task) => (
-              <WorkerJobCard
-                key={task.id}
-                task={task}
-                onPress={() => navigation.navigate("WorkerJobDetail", { taskId: task.id })}
-              />
-            ))
+          refreshControl={
+            <RefreshControl
+              refreshing={isLoading}
+              onRefresh={() => { qc.removeQueries({ queryKey: ["worker-tasks", dbUserId] }); refetch(); }}
+            />
+          }
+          onEndReached={() => { if (hasNextPage) fetchNextPage(); }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={colors.brandGreen} style={{ margin: 16 }} /> : null}
+          ListEmptyComponent={<EmptyState icon="📋" title={`No ${tab} jobs`} />}
+          renderItem={({ item: task }) => (
+            <WorkerJobCard
+              task={task}
+              onPress={() => {
+                if (task.status === "in_progress") {
+                  navigation.navigate("WorkerActiveJob", { taskId: task.id });
+                } else if (task.status === "payment_pending") {
+                  navigation.navigate("WorkerJobCompletion", { taskId: task.id });
+                } else {
+                  navigation.navigate("WorkerJobDetail", { taskId: task.id });
+                }
+              }}
+            />
           )}
-        </ScrollView>
+        />
       )}
     </View>
   );

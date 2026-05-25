@@ -3,9 +3,11 @@ import { NavigationContainer } from "@react-navigation/native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { StripeProvider } from "@stripe/stripe-react-native";
 import { AuthProvider } from "../store/authStore";
 import { RootNavigator } from "../navigation/RootNavigator";
 import { LoadingScreen } from "../screens/LoadingScreen";
+import { env } from "../services/env";
 
 const queryClient = new QueryClient();
 
@@ -35,16 +37,18 @@ export function AppRoot() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <NavigationContainer>
-            <RootNavigator
-              isOnboardingCompleted={isOnboardingCompleted}
-              onCompleteOnboarding={handleCompleteOnboarding}
-            />
-          </NavigationContainer>
-        </AuthProvider>
-      </QueryClientProvider>
+      <StripeProvider publishableKey={env.stripePublishableKey} merchantIdentifier="merchant.com.taskero">
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <NavigationContainer>
+              <RootNavigator
+                isOnboardingCompleted={isOnboardingCompleted}
+                onCompleteOnboarding={handleCompleteOnboarding}
+              />
+            </NavigationContainer>
+          </AuthProvider>
+        </QueryClientProvider>
+      </StripeProvider>
     </GestureHandlerRootView>
   );
 }

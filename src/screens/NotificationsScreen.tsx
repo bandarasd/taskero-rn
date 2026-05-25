@@ -1,9 +1,9 @@
-import React from "react";
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View, StatusBar, SafeAreaView } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import React, { useCallback } from "react";
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View, StatusBar, SafeAreaView } from "react-native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
-import { getNotifications, markNotificationRead } from "../services/notificationService";
+import { getNotifications, markNotificationRead, markAllNotificationsRead } from "../services/notificationService";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { EmptyState } from "../components/common/EmptyState";
 import { colors } from "../theme/colors";
@@ -16,15 +16,19 @@ export function NotificationsScreen() {
   const { dbUserId, role } = useAuth();
   const qc = useQueryClient();
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ["notifications", dbUserId],
-    queryFn: () => getNotifications(dbUserId!),
+    queryFn: ({ pageParam = 1 }) => getNotifications(dbUserId!, pageParam, 20),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
     enabled: !!dbUserId,
   });
 
+  const notifications = data?.pages.flatMap((p) => p.data) ?? [];
+
   const markAllRead = useMutation({
     mutationFn: async () => {
-      const unread = (data ?? []).filter((n) => !n.is_read);
+      const unread = notifications.filter((n) => !n.is_read);
       await Promise.all(unread.map((n) => markNotificationRead(n.id)));
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
@@ -40,6 +44,8 @@ export function NotificationsScreen() {
       if (taskId) {
         if (role === "worker") {
           navigation.navigate("WorkerJobDetail" as never, { taskId } as never);
+        } else if (n.type === "delay") {
+          navigation.navigate("CustomerDelayResponse" as never, { taskId } as never);
         } else {
           navigation.navigate("AppointmentDetail" as never, { taskId } as never);
         }
@@ -47,7 +53,16 @@ export function NotificationsScreen() {
     } catch {}
   };
 
-  const unreadCount = (data ?? []).filter((n) => !n.is_read).length;
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!dbUserId) return;
+      markAllNotificationsRead(dbUserId)
+        .then(() => qc.invalidateQueries({ queryKey: ["notifications"] }))
+        .catch(() => {});
+    }, [dbUserId, qc])
+  );
 
   const renderItem = ({ item: n }: { item: APINotification }) => (
     <Pressable
@@ -99,20 +114,23 @@ export function NotificationsScreen() {
         <LoadingSpinner />
       ) : (
         <FlatList
-          data={data}
+          data={notifications}
           keyExtractor={(n) => n.id}
           refreshControl={
             <RefreshControl
               refreshing={isLoading}
-              onRefresh={refetch}
+              onRefresh={() => { qc.removeQueries({ queryKey: ["notifications", dbUserId] }); refetch(); }}
               tintColor={colors.brandGreen}
             />
           }
+          onEndReached={() => { if (hasNextPage) fetchNextPage(); }}
+          onEndReachedThreshold={0.3}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <EmptyState icon="🔔" title="No notifications yet" />
             </View>
           }
+          ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={colors.brandGreen} style={{ margin: 16 }} /> : null}
           contentContainerStyle={styles.listContent}
           renderItem={renderItem}
           ItemSeparatorComponent={() => <View style={styles.divider} />}

@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
+  Image,
   ImageBackground,
   KeyboardAvoidingView,
   Platform,
@@ -18,10 +20,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getTaskById, submitQuote, updateTaskStatus } from "../../services/taskService";
 import { getUserById } from "../../services/userService";
 import { createThread } from "../../services/chatService";
-import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { Avatar } from "../../components/common/Avatar";
 import { TaskStatusBadge } from "../../components/common/Badge";
 import { Button } from "../../components/common/Button";
+import { SwipeToConfirm } from "../../components/common/SwipeToConfirm";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import { useAuth } from "../../store/authStore";
@@ -60,6 +62,39 @@ function SectionDivider() {
   return <View style={styles.divider} />;
 }
 
+function SkeletonBox({ width, height, style }: { width: number | string; height: number; style?: object }) {
+  const anim = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.4, duration: 700, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+  return (
+    <Animated.View
+      style={[{ width, height, borderRadius: radius.md, backgroundColor: colors.sectionHeader, opacity: anim }, style]}
+    />
+  );
+}
+
+function CustomerPhotosSkeleton() {
+  return (
+    <>
+      <SectionDivider />
+      <View style={styles.section}>
+        <SkeletonBox width={120} height={12} style={{ marginBottom: 16 }} />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photosRow}>
+          {[0, 1, 2].map((i) => (
+            <SkeletonBox key={i} width={120} height={120} style={{ marginRight: 10 }} />
+          ))}
+        </ScrollView>
+      </View>
+    </>
+  );
+}
+
 function fmtDate(iso?: string | null) {
   if (!iso) return "Not set";
   return new Date(iso).toLocaleDateString("en-US", {
@@ -89,7 +124,8 @@ export function WorkerJobDetailScreen() {
   const { dbUserId } = useAuth();
   const qc = useQueryClient();
   const [quotePrice, setQuotePrice] = useState("");
-  const [quoteDuration, setQuoteDuration] = useState("");
+  const [durationHours, setDurationHours] = useState(0);
+  const [durationMinutes, setDurationMinutes] = useState(0);
   const [quoteNotes, setQuoteNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
@@ -106,6 +142,13 @@ export function WorkerJobDetailScreen() {
   });
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["task", taskId] });
+
+  // Redirect to active job timer if task is already in_progress
+  useEffect(() => {
+    if (task?.status === "in_progress") {
+      navigation.navigate("WorkerActiveJob", { taskId });
+    }
+  }, [task?.status]);
 
   const handleMessage = async () => {
     if (!task?.customer_id || !dbUserId) return;
@@ -125,13 +168,13 @@ export function WorkerJobDetailScreen() {
 
   const handleSubmitQuote = async () => {
     const price = parseFloat(quotePrice);
-    const duration = parseInt(quoteDuration, 10);
+    const duration = durationHours * 60 + durationMinutes;
     if (!price || isNaN(price)) {
       Alert.alert("Enter a valid price");
       return;
     }
-    if (!duration || isNaN(duration) || duration <= 0) {
-      Alert.alert("Enter estimated duration in minutes");
+    if (duration <= 0) {
+      Alert.alert("Select an estimated duration");
       return;
     }
     setLoading(true);
@@ -150,6 +193,9 @@ export function WorkerJobDetailScreen() {
     try {
       await updateTaskStatus(taskId, status);
       await refresh();
+      if (status === "in_progress") {
+        navigation.navigate("WorkerActiveJob", { taskId });
+      }
     } catch (e: any) {
       Alert.alert("Error", e.message || "Could not update status");
     } finally {
@@ -157,24 +203,64 @@ export function WorkerJobDetailScreen() {
     }
   };
 
-  if (isLoading || !task) return <LoadingSpinner />;
+  if (isLoading || !task) return (
+    <View style={styles.mainContainer}>
+      <View style={[styles.heroWrapper, { backgroundColor: colors.sectionHeader }]} />
+      <View style={[styles.statusStrip, { backgroundColor: colors.sectionHeader }]} />
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        <View style={styles.section}>
+          <View style={styles.customerRow}>
+            <SkeletonBox width={52} height={52} style={{ borderRadius: 26 }} />
+            <View style={[styles.customerInfo, { gap: 8 }]}>
+              <SkeletonBox width={140} height={14} />
+              <SkeletonBox width={80} height={12} />
+            </View>
+          </View>
+        </View>
+        <SectionDivider />
+        <View style={styles.section}>
+          <SkeletonBox width={90} height={12} style={{ marginBottom: 16 }} />
+          {[0, 1, 2, 3].map((i) => (
+            <View key={i} style={[styles.infoRow, { marginBottom: 16 }]}>
+              <SkeletonBox width={120} height={12} />
+              <SkeletonBox width={100} height={12} />
+            </View>
+          ))}
+        </View>
+        <CustomerPhotosSkeleton />
+      </ScrollView>
+    </View>
+  );
 
   const displayCustomer = customer || task.customer;
   const customerName = displayCustomer
     ? `${displayCustomer.first_name ?? ""} ${displayCustomer.last_name ?? ""}`.trim()
     : "Customer";
 
-  const category = (task.category || task.gig?.category || "General") as string;
+  const category = (task.category || "General") as string;
   const toUrl = (a: unknown) => typeof a === "string" ? a : (a as { url?: string })?.url ?? null;
+  const gigAttachments: unknown[] = Array.isArray(task.gig_attachments)
+    ? task.gig_attachments
+    : task.gig_attachments
+    ? [task.gig_attachments]
+    : [];
   const imageUri =
-    toUrl(task.attachments?.[0]) ||
-    toUrl(task.gig?.attachments?.[0]) ||
+    toUrl(gigAttachments[0]) ||
     CATEGORY_IMAGES[category] ||
     CATEGORY_IMAGES.General;
 
   const statusConfig = STATUS_STRIP_CONFIG[task.status] || STATUS_STRIP_CONFIG.pending;
 
-  const showStickyActions = ["pending", "accepted", "in_progress"].includes(task.status);
+  const showStickyActions = ["accepted", "in_progress"].includes(task.status);
+  const customerPhotos: string[] = Array.isArray(task.attachments)
+    ? (task.attachments as unknown[]).map(toUrl).filter(Boolean) as string[]
+    : [];
+  const rawDetails = task.details
+    ? typeof task.details === "string"
+      ? (() => { try { return JSON.parse(task.details); } catch { return {}; } })()
+      : task.details
+    : {};
+  const serviceDetails: [string, any][] = Object.entries(rawDetails).filter(([, v]) => v !== null && v !== undefined && v !== "");
 
   return (
     <View style={styles.mainContainer}>
@@ -183,7 +269,7 @@ export function WorkerJobDetailScreen() {
         <ImageBackground source={{ uri: imageUri }} style={styles.heroImage}>
           <View style={styles.heroOverlay}>
             <View style={styles.heroBottomContent}>
-              <Text style={styles.heroTitle}>{task.gig?.title ?? task.title ?? "Service Request"}</Text>
+              <Text style={styles.heroTitle}>{task.gig_title ?? task.title ?? "Service Request"}</Text>
               <TaskStatusBadge status={task.status} />
             </View>
           </View>
@@ -199,9 +285,9 @@ export function WorkerJobDetailScreen() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+        keyboardVerticalOffset={insets.bottom + 60}
       >
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, showStickyActions && { paddingBottom: 80 + insets.bottom }]}>
           {/* Customer Section */}
           <View style={styles.section}>
             <View style={styles.customerRow}>
@@ -232,6 +318,24 @@ export function WorkerJobDetailScreen() {
             />
           </View>
 
+          {/* Service Details (customer-selected fields) */}
+          {serviceDetails.length > 0 && (
+            <>
+              <SectionDivider />
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Service Details</Text>
+                {serviceDetails.map(([k, v]) => (
+                  <InfoRow
+                    key={k}
+                    icon="📋"
+                    label={k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                    value={String(v)}
+                  />
+                ))}
+              </View>
+            </>
+          )}
+
           {/* Notes Section */}
           {task.notes && (
             <>
@@ -245,6 +349,21 @@ export function WorkerJobDetailScreen() {
             </>
           )}
 
+          {/* Customer Photos */}
+          {customerPhotos.length > 0 && (
+            <>
+              <SectionDivider />
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Customer Photos</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photosRow}>
+                  {customerPhotos.map((uri, i) => (
+                    <Image key={i} source={{ uri }} style={styles.attachmentThumb} />
+                  ))}
+                </ScrollView>
+              </View>
+            </>
+          )}
+
           {/* Earnings Section (non-pending) */}
           {task.status !== "pending" && (
             <>
@@ -254,96 +373,158 @@ export function WorkerJobDetailScreen() {
                   {task.status === "quoted" ? "Your Quote" : "Your Earnings"}
                 </Text>
                 <Text style={styles.earningsValue}>
-                  ${task.quoted_price ?? task.base_price ?? 0}
+                  Rs. {task.quoted_price ?? task.base_price ?? 0}
                 </Text>
               </View>
             </>
           )}
 
-          {/* Quote Form (pending only) */}
+          {/* Quote Form (pending only) — buttons live inside here */}
           {task.status === "pending" && (
             <>
               <SectionDivider />
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>Send Your Quote</Text>
                 <View style={styles.quoteForm}>
-                  <View style={styles.priceInputWrapper}>
-                    <Text style={styles.inputPrefix}>$</Text>
+                  {/* Quote Price */}
+                  <View>
+                    <View style={styles.fieldLabelRow}>
+                      <Text style={styles.fieldLabel}>Quote Price</Text>
+                      <Text style={styles.requiredStar}> *</Text>
+                    </View>
+                    <View style={styles.priceInputWrapper}>
+                      <Text style={styles.inputPrefix}>Rs.</Text>
+                      <TextInput
+                        style={styles.priceInput}
+                        value={quotePrice}
+                        onChangeText={setQuotePrice}
+                        placeholder="0.00"
+                        keyboardType="decimal-pad"
+                        placeholderTextColor={colors.subtext}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Estimated Duration — +/- stepper, no nested scroll */}
+                  <View>
+                    <View style={styles.fieldLabelRow}>
+                      <Text style={styles.fieldLabel}>Estimated Duration</Text>
+                      <Text style={styles.requiredStar}> *</Text>
+                    </View>
+                    <View style={styles.durationStepper}>
+                      {/* Hours */}
+                      <View style={styles.stepperUnit}>
+                        <Text style={styles.stepperLabel}>Hours</Text>
+                        <View style={styles.stepperRow}>
+                          <TouchableOpacity
+                            style={styles.stepperBtn}
+                            onPress={() => setDurationHours((h) => (h === 0 ? 23 : h - 1))}
+                          >
+                            <Text style={styles.stepperBtnText}>−</Text>
+                          </TouchableOpacity>
+                          <Text style={styles.stepperValue}>{String(durationHours).padStart(2, "0")}</Text>
+                          <TouchableOpacity
+                            style={styles.stepperBtn}
+                            onPress={() => setDurationHours((h) => (h === 23 ? 0 : h + 1))}
+                          >
+                            <Text style={styles.stepperBtnText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+
+                      <Text style={styles.stepperColon}>:</Text>
+
+                      {/* Minutes */}
+                      <View style={styles.stepperUnit}>
+                        <Text style={styles.stepperLabel}>Minutes</Text>
+                        <View style={styles.stepperRow}>
+                          <TouchableOpacity
+                            style={styles.stepperBtn}
+                            onPress={() => {
+                              const MINS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+                              const idx = MINS.indexOf(durationMinutes);
+                              setDurationMinutes(MINS[idx === 0 ? MINS.length - 1 : idx - 1]);
+                            }}
+                          >
+                            <Text style={styles.stepperBtnText}>−</Text>
+                          </TouchableOpacity>
+                          <Text style={styles.stepperValue}>{String(durationMinutes).padStart(2, "0")}</Text>
+                          <TouchableOpacity
+                            style={styles.stepperBtn}
+                            onPress={() => {
+                              const MINS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+                              const idx = MINS.indexOf(durationMinutes);
+                              setDurationMinutes(MINS[(idx + 1) % MINS.length]);
+                            }}
+                          >
+                            <Text style={styles.stepperBtnText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                    {(durationHours > 0 || durationMinutes > 0) && (
+                      <Text style={styles.durationSummary}>
+                        {durationHours}h {durationMinutes}m selected
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* Notes (optional) */}
+                  <View>
+                    <Text style={styles.fieldLabel}>Notes for Customer</Text>
                     <TextInput
-                      style={styles.priceInput}
-                      value={quotePrice}
-                      onChangeText={setQuotePrice}
-                      placeholder="Price"
-                      keyboardType="decimal-pad"
+                      style={styles.notesInput}
+                      value={quoteNotes}
+                      onChangeText={setQuoteNotes}
+                      placeholder="Add notes for the customer (optional)..."
+                      multiline
                       placeholderTextColor={colors.subtext}
                     />
                   </View>
-                  <View style={styles.durationInputWrapper}>
-                    <Text style={styles.inputPrefix}>⏱</Text>
-                    <TextInput
-                      style={styles.priceInput}
-                      value={quoteDuration}
-                      onChangeText={setQuoteDuration}
-                      placeholder="Estimated duration (minutes)"
-                      keyboardType="number-pad"
-                      placeholderTextColor={colors.subtext}
+
+                  {/* Action buttons inside the form */}
+                  <View style={[styles.buttonRow, { marginTop: 8, paddingBottom: Math.max(insets.bottom, 12) }]}>
+                    <Button
+                      label="Decline"
+                      onPress={() => handleStatus("declined")}
+                      variant="outline"
+                      style={{ flex: 1 }}
+                      disabled={loading}
+                    />
+                    <Button
+                      label="Send Quote"
+                      onPress={handleSubmitQuote}
+                      style={{ flex: 1 }}
+                      loading={loading}
                     />
                   </View>
-                  <TextInput
-                    style={styles.notesInput}
-                    value={quoteNotes}
-                    onChangeText={setQuoteNotes}
-                    placeholder="Add notes for the customer (optional)..."
-                    multiline
-                    placeholderTextColor={colors.subtext}
-                  />
                 </View>
               </View>
             </>
           )}
         </ScrollView>
 
-        {/* Sticky Bottom Action Bar */}
-        {showStickyActions && (
-          <View style={[styles.stickyBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-            {task.status === "pending" && (
-              <View style={styles.buttonRow}>
-                <Button
-                  label="Decline"
-                  onPress={() => handleStatus("declined")}
-                  variant="outline"
-                  style={{ flex: 1 }}
-                  disabled={loading}
-                />
-                <Button
-                  label="Send Quote"
-                  onPress={handleSubmitQuote}
-                  style={{ flex: 1 }}
-                  loading={loading}
-                />
-              </View>
-            )}
-
-            {task.status === "accepted" && (
-              <Button
-                label="Start Job"
-                onPress={() => handleStatus("in_progress")}
-                loading={loading}
-                fullWidth
-              />
-            )}
-
-            {task.status === "in_progress" && (
-              <Button
-                label="Mark as Complete"
-                onPress={() => handleStatus("completed")}
-                loading={loading}
-                fullWidth
-              />
-            )}
-          </View>
-        )}
       </KeyboardAvoidingView>
+
+      {/* Sticky bottom bar for accepted / in_progress */}
+      {(task.status === "accepted" || task.status === "in_progress") && (
+        <View style={[styles.stickyBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          {task.status === "accepted" && (
+            <SwipeToConfirm
+              label="Swipe to Start Job"
+              onConfirm={() => handleStatus("in_progress")}
+              loading={loading}
+            />
+          )}
+          {task.status === "in_progress" && (
+            <Button
+              label="Resume Active Job"
+              onPress={() => navigation.navigate("WorkerActiveJob", { taskId })}
+              fullWidth
+            />
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -401,7 +582,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     backgroundColor: "#fff",
-    paddingBottom: 24,
+    paddingBottom: 100,
   },
   section: {
     paddingHorizontal: 20,
@@ -522,14 +703,100 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   stickyBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: "#fff",
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingTop: 12,
   },
   buttonRow: {
     flexDirection: "row",
     gap: 12,
+  },
+  photosRow: {
+    marginTop: 4,
+  },
+  attachmentThumb: {
+    width: 120,
+    height: 120,
+    borderRadius: radius.md,
+    marginRight: 10,
+  },
+  fieldLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.subtext,
+  },
+  requiredStar: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.danger,
+  },
+  durationStepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.borderLight,
+    borderRadius: radius.md,
+    padding: 16,
+    gap: 8,
+  },
+  stepperUnit: {
+    flex: 1,
+    alignItems: "center",
+  },
+  stepperLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.subtext,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  stepperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  stepperBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.brandGreen,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  stepperBtnText: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#fff",
+    lineHeight: 24,
+  },
+  stepperValue: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: colors.text,
+    minWidth: 44,
+    textAlign: "center",
+  },
+  stepperColon: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: colors.text,
+    marginTop: 20,
+  },
+  durationSummary: {
+    fontSize: 12,
+    color: colors.subtext,
+    marginTop: 8,
+    textAlign: "center",
   },
 });

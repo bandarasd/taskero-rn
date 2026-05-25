@@ -1,5 +1,4 @@
 import React from "react";
-import { PlaceholderScreen } from "../../components/PlaceholderScreen";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StyleSheet, View } from "react-native";
@@ -7,6 +6,8 @@ import { StyleSheet, View } from "react-native";
 import { WorkerDashboardScreen } from "../../screens/worker/WorkerDashboardScreen";
 import { WorkerJobsScreen } from "../../screens/worker/WorkerJobsScreen";
 import { WorkerJobDetailScreen } from "../../screens/worker/WorkerJobDetailScreen";
+import { WorkerActiveJobScreen } from "../../screens/worker/WorkerActiveJobScreen";
+import { WorkerJobCompletionScreen } from "../../screens/worker/WorkerJobCompletionScreen";
 import { WorkerScheduleScreen } from "../../screens/worker/WorkerScheduleScreen";
 import { WorkerMessagesScreen } from "../../screens/worker/WorkerMessagesScreen";
 import { WorkerChatScreen } from "../../screens/worker/WorkerChatScreen";
@@ -20,16 +21,23 @@ import { NotificationsScreen } from "../../screens/NotificationsScreen";
 import { HelpCenterScreen } from "../../screens/HelpCenterScreen";
 import { PrivacyPolicyScreen } from "../../screens/PrivacyPolicyScreen";
 import { SecuritySettingsScreen } from "../../screens/SecuritySettingsScreen";
+import { WorkerSettingsScreen } from "../../screens/worker/WorkerSettingsScreen";
+import { WorkerCertificationsScreen } from "../../screens/worker/WorkerCertificationsScreen";
+import { RequestCertificationScreen } from "../../screens/worker/RequestCertificationScreen";
+import { ServiceAreaPickerScreen } from "../../screens/worker/ServiceAreaPickerScreen";
 import { Ionicons } from "@expo/vector-icons";
 import type { WorkerStackParamList } from "../stacks/WorkerStack";
 import { colors } from "../../theme/colors";
 import { useUnreadMessageCount } from "../../hooks/useUnreadMessageCount";
+import { useUnreadBookingNotificationCount } from "../../hooks/useUnreadBookingNotificationCount";
 
 // ─── Shared screens across worker tabs ───────────────────────────────────────
 
 const sharedScreens = (Stack: ReturnType<typeof createNativeStackNavigator<WorkerStackParamList>>) => (
   <>
     <Stack.Screen name="WorkerJobDetail" component={WorkerJobDetailScreen} options={{ title: "Job Details" }} />
+    <Stack.Screen name="WorkerActiveJob" component={WorkerActiveJobScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="WorkerJobCompletion" component={WorkerJobCompletionScreen} options={{ headerShown: false }} />
     <Stack.Screen name="WorkerChat" component={WorkerChatScreen} options={({ route }) => ({ title: route.params.otherUserName ?? "Chat" })} />
     <Stack.Screen name="WorkerServices" component={WorkerServicesScreen} options={{ title: "My Services" }} />
     <Stack.Screen name="AddEditService" component={AddEditServiceScreen} options={({ route }) => ({ title: route.params.gigId ? "Edit Service" : "Add Service" })} />
@@ -38,10 +46,13 @@ const sharedScreens = (Stack: ReturnType<typeof createNativeStackNavigator<Worke
     <Stack.Screen name="WorkerEditProfile" component={EditProfileScreen} options={{ title: "Edit Profile" }} />
     <Stack.Screen name="TaskerAvailability" component={WorkerScheduleScreen} options={{ title: "Availability" }} />
     <Stack.Screen name="WorkerNotifications" component={NotificationsScreen} options={{ title: "Notifications" }} />
-    <Stack.Screen name="WorkerSettings" component={PlaceholderScreen("Settings")} options={{ title: "Settings" }} />
+    <Stack.Screen name="WorkerSettings" component={WorkerSettingsScreen} options={{ title: "Settings" }} />
     <Stack.Screen name="SecuritySettings" component={SecuritySettingsScreen} options={{ title: "Security" }} />
     <Stack.Screen name="HelpCenter" component={HelpCenterScreen} options={{ title: "Help Center" }} />
     <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: "Privacy Policy" }} />
+    <Stack.Screen name="WorkerCertifications" component={WorkerCertificationsScreen} options={{ title: "Certifications" }} />
+    <Stack.Screen name="RequestCertification" component={RequestCertificationScreen} options={{ title: "Apply for Certification" }} />
+    <Stack.Screen name="ServiceAreaPicker" component={ServiceAreaPickerScreen} options={{ title: "Set Service Area", presentation: "modal" }} />
   </>
 );
 
@@ -128,19 +139,20 @@ const LABELS: Record<keyof WorkerTabParamList, string> = {
 const styles = StyleSheet.create({
   dot: {
     position: "absolute",
-    top: 0,
-    right: -2,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: -2,
+    right: -4,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: "#EF4444",
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: "#fff",
   },
 });
 
 export function WorkerTabs() {
   const unreadCount = useUnreadMessageCount();
+  const bookingNotifCount = useUnreadBookingNotificationCount();
 
   return (
     <Tab.Navigator
@@ -170,7 +182,9 @@ export function WorkerTabs() {
           const iconName = focused
             ? ICONS[route.name as keyof WorkerTabParamList].active
             : ICONS[route.name as keyof WorkerTabParamList].inactive;
-          const showDot = route.name === "MessagesTab" && unreadCount > 0;
+          const showDot =
+            (route.name === "MessagesTab" && unreadCount > 0) ||
+            (route.name === "JobsTab" && bookingNotifCount > 0);
 
           return (
             <View>

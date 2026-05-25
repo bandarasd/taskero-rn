@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  ActivityIndicator,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -8,7 +9,7 @@ import {
   StatusBar,
   TouchableOpacity,
 } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { getTaskerReviews } from "../../services/reviewService";
 import { Avatar } from "../../components/common/Avatar";
@@ -21,15 +22,20 @@ import { useAuth } from "../../store/authStore";
 
 export function WorkerReviewsScreen() {
   const { dbUserId } = useAuth();
+  const qc = useQueryClient();
 
-  const { data: reviews, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ["worker-reviews", dbUserId],
-    queryFn: () => getTaskerReviews(dbUserId!),
+    queryFn: ({ pageParam = 1 }) => getTaskerReviews(dbUserId!, pageParam, 10),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
     enabled: !!dbUserId,
   });
 
+  const reviews = data?.pages.flatMap((p) => p.data) ?? [];
+
   const avg =
-    reviews && reviews.length > 0
+    reviews.length > 0
       ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
       : 0;
 
@@ -42,7 +48,7 @@ export function WorkerReviewsScreen() {
       <View style={styles.summaryRight}>
         <Text style={styles.summaryLabel}>out of 5</Text>
         <Text style={styles.summaryCount}>
-          Based on {reviews?.length || 0} reviews
+          Based on {reviews.length} reviews
         </Text>
       </View>
     </View>
@@ -59,9 +65,9 @@ export function WorkerReviewsScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      
+
       {!isLoading && <RatingSummaryStrip />}
-      {!isLoading && reviews && reviews.length > 0 && <SortRow />}
+      {!isLoading && reviews.length > 0 && <SortRow />}
 
       {isLoading ? (
         <LoadingSpinner />
@@ -71,10 +77,13 @@ export function WorkerReviewsScreen() {
           keyExtractor={(r) => r.id}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          onEndReached={() => { if (hasNextPage) fetchNextPage(); }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={colors.brandGreen} style={{ margin: 16 }} /> : null}
           refreshControl={
             <RefreshControl
               refreshing={isLoading}
-              onRefresh={refetch}
+              onRefresh={() => { qc.removeQueries({ queryKey: ["worker-reviews", dbUserId] }); refetch(); }}
               tintColor={colors.brandGreen}
             />
           }

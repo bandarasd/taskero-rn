@@ -1,5 +1,6 @@
 import React from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { APITask, ServiceCategory } from "../../types";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
@@ -37,43 +38,66 @@ export function WorkerJobCard({ task, onPress }: Props) {
     ? `${task.customer.first_name ?? ""} ${task.customer.last_name ?? ""}`.trim()
     : "Customer";
 
+  const isPending = task.status === "pending";
   const category = (task.category || task.gig?.category || "General") as string;
   const toUrl = (a: unknown) => typeof a === "string" ? a : (a as { url?: string })?.url ?? null;
   const imageUri = toUrl(task.gig_attachments?.[0]) || toUrl(task.attachments?.[0]) || CATEGORY_IMAGES[category] || CATEGORY_IMAGES.General;
 
+  const price = task.quoted_price != null
+    ? `Rs. ${task.quoted_price}`
+    : task.base_price != null
+    ? `Rs. ${task.base_price}`
+    : "Pending";
+
   return (
     <Pressable style={styles.card} onPress={onPress}>
-      <View style={styles.contentRow}>
-        <View style={styles.mainInfo}>
-          <View style={styles.header}>
-            <Text style={styles.title} numberOfLines={1}>
-              {task.gig_title ?? task.title ?? "Service Request"}
-            </Text>
-          </View>
-          
-          <View style={styles.metaRow}>
-            <Text style={styles.date}>{fmtDate(task.scheduled_at)}</Text>
-            <View style={styles.statusBadgeContainer}>
-              <TaskStatusBadge status={task.status} />
-            </View>
-          </View>
-
-          <Text style={styles.location} numberOfLines={1}>
-            📍 {task.location_address ?? "Location not set"}
+      {isPending && <View style={styles.accentBar} />}
+      <View style={styles.inner}>
+        {/* Header row: title + badge */}
+        <View style={styles.headerRow}>
+          <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
+            {task.gig_title ?? task.title ?? "Service Request"}
           </Text>
-
-          <View style={styles.footer}>
-            <View style={styles.customerRow}>
-              <Avatar uri={task.customer?.avatar_url} name={customerName} size={24} />
-              <Text style={styles.customerName}>{customerName}</Text>
-            </View>
-            <Text style={styles.price}>
-              {task.quoted_price != null ? `Rs. ${task.quoted_price}` : task.base_price != null ? `Rs. ${task.base_price}` : "Pending"}
-            </Text>
-          </View>
+          <TaskStatusBadge status={task.status} />
         </View>
 
-        <Image source={{ uri: imageUri }} style={styles.jobImage} />
+        {isPending && (
+          <Text style={styles.actionHint}>Tap to review & accept</Text>
+        )}
+
+        <View style={styles.body}>
+          <View style={styles.mainInfo}>
+            {/* Date */}
+            <View style={styles.metaRow}>
+              <Ionicons name="calendar-outline" size={13} color={colors.brandGreen} />
+              <Text style={styles.date}>{fmtDate(task.scheduled_at)}</Text>
+            </View>
+
+            {/* Location */}
+            <View style={styles.metaRow}>
+              <Ionicons name="location-outline" size={13} color={colors.subtext} />
+              <Text style={styles.location} numberOfLines={1}>
+                {task.location_address ?? "Location not set"}
+              </Text>
+            </View>
+
+            {/* Customer + Price */}
+            <View style={styles.footer}>
+              <View style={styles.customerRow}>
+                <Avatar uri={task.customer?.avatar_url} name={customerName} size={22} />
+                <View>
+                  <Text style={styles.customerLabel}>Customer</Text>
+                  <Text style={styles.customerName}>{customerName}</Text>
+                </View>
+              </View>
+              <Text style={[styles.price, isPending && styles.pricePending]}>
+                {price}
+              </Text>
+            </View>
+          </View>
+
+          <Image source={{ uri: imageUri }} style={styles.jobImage} />
+        </View>
       </View>
     </Pressable>
   );
@@ -83,79 +107,106 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.md,
-    padding: spacing.md,
     marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: colors.borderLight,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 2,
-  },
-  contentRow: {
     flexDirection: "row",
-    gap: 16,
+    overflow: "hidden",
   },
-  mainInfo: {
+  accentBar: {
+    width: 4,
+    backgroundColor: colors.brandGreen,
+  },
+  inner: {
     flex: 1,
+    padding: spacing.md,
   },
-  jobImage: {
-    width: 80,
-    height: 80,
-    borderRadius: radius.sm,
-    backgroundColor: colors.borderLight,
-  },
-  header: {
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
     marginBottom: 4,
   },
   title: {
-    fontSize: 17,
+    flex: 1,
+    fontSize: 16,
     fontWeight: "700",
     color: colors.text,
     letterSpacing: -0.2,
   },
+  actionHint: {
+    fontSize: 11,
+    color: colors.brandGreen,
+    fontWeight: "600",
+    marginBottom: 10,
+    letterSpacing: 0.1,
+  },
+  body: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  mainInfo: {
+    flex: 1,
+    gap: 6,
+  },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
+    gap: 5,
   },
   date: {
     fontSize: 13,
     color: colors.brandGreen,
     fontWeight: "600",
   },
-  statusBadgeContainer: {
-    transform: [{ scale: 0.85 }],
-    marginLeft: -4,
-  },
   location: {
     fontSize: 13,
     color: colors.subtext,
-    marginBottom: 12,
     fontWeight: "500",
+    flex: 1,
   },
   footer: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
-    marginTop: "auto",
+    marginTop: 4,
   },
   customerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 7,
+  },
+  customerLabel: {
+    fontSize: 10,
+    color: colors.subtext,
+    fontWeight: "500",
+    lineHeight: 13,
   },
   customerName: {
     fontSize: 13,
     color: colors.text,
     fontWeight: "600",
+    lineHeight: 16,
   },
   price: {
     fontSize: 16,
     fontWeight: "800",
     color: colors.text,
   },
+  pricePending: {
+    color: colors.brandGreen,
+  },
+  jobImage: {
+    width: 76,
+    height: 76,
+    borderRadius: radius.sm,
+    backgroundColor: colors.borderLight,
+    alignSelf: "center",
+  },
 });
-

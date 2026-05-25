@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -40,6 +41,8 @@ export function WorkerChatScreen() {
   const [messages, setMessages] = useState<APIChatMessage[]>([]);
   const [taskCache, setTaskCache] = useState<Record<string, APITask>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
@@ -49,15 +52,32 @@ export function WorkerChatScreen() {
     getTaskById(id).then((t) => setTaskCache((prev) => ({ ...prev, [id]: t }))).catch(() => {});
   };
 
+  const loadOlderMessages = useCallback(async () => {
+    if (loadingOlder || !hasOlderMessages || messages.length === 0) return;
+    const oldestId = messages[0].id;
+    setLoadingOlder(true);
+    try {
+      const res = await getChatMessages(threadId, oldestId, 30);
+      if (res.data.length > 0) {
+        setMessages((prev) => [...res.data, ...prev]);
+        res.data.forEach((m) => { if (m.message_type === 'booking_ref' && m.ref_task_id) fetchTask(m.ref_task_id); });
+      }
+      setHasOlderMessages(res.pagination.hasMore);
+    } catch {} finally {
+      setLoadingOlder(false);
+    }
+  }, [loadingOlder, hasOlderMessages, messages, threadId]);
+
   useEffect(() => {
     let mounted = true;
 
     getChatMessages(threadId)
-      .then((data) => {
+      .then((res) => {
         if (!mounted) return;
-        setMessages(data);
+        setMessages(res.data);
+        setHasOlderMessages(res.pagination.hasMore);
         setLoading(false);
-        data.forEach((m) => { if (m.message_type === 'booking_ref' && m.ref_task_id) fetchTask(m.ref_task_id); });
+        res.data.forEach((m) => { if (m.message_type === 'booking_ref' && m.ref_task_id) fetchTask(m.ref_task_id); });
       })
       .catch(() => { if (mounted) setLoading(false); });
 
@@ -127,6 +147,8 @@ export function WorkerChatScreen() {
         keyExtractor={(m) => m.id}
         contentContainerStyle={styles.list}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+        onScrollBeginDrag={() => { if (hasOlderMessages) loadOlderMessages(); }}
+        ListHeaderComponent={loadingOlder ? <ActivityIndicator color={colors.brandGreen} style={{ margin: 12 }} /> : null}
         renderItem={({ item }) => {
           if (item.message_type === 'booking_ref' && item.ref_task_id) {
             const taskData = taskCache[item.ref_task_id];

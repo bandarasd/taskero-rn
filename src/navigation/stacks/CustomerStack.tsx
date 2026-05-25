@@ -1,6 +1,7 @@
 import React from "react";
-import { PlaceholderScreen } from "../../components/PlaceholderScreen";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { ClientPaymentMethodsScreen } from "../../screens/ClientPaymentMethodsScreen";
+import { MyReviewsScreen } from "../../screens/MyReviewsScreen";
 import { ServiceCategory } from "../../types";
 
 // Screens
@@ -21,6 +22,7 @@ import { HelpCenterScreen } from "../../screens/HelpCenterScreen";
 import { PrivacyPolicyScreen } from "../../screens/PrivacyPolicyScreen";
 import { SecuritySettingsScreen } from "../../screens/SecuritySettingsScreen";
 import { BookingFlowNavigator } from "../../screens/BookingFlow/BookingFlowNavigator";
+import { CustomerDelayResponseScreen } from "../../screens/CustomerDelayResponseScreen";
 
 export type CustomerStackParamList = {
   // Tab roots
@@ -53,6 +55,9 @@ export type CustomerStackParamList = {
 
   // Booking flow (nested navigator)
   BookingFlow: { gigId: string };
+
+  // Delay response
+  CustomerDelayResponse: { taskId: string };
 };
 
 const Stack = createNativeStackNavigator<CustomerStackParamList>();
@@ -72,13 +77,14 @@ export function CustomerStack() {
       <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => ({ title: route.params.otherUserName ?? "Chat" })} />
       <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: "Edit Profile" }} />
-      <Stack.Screen name="ClientPaymentMethods" component={PlaceholderScreen("Payment Methods")} options={{ title: "Payment Methods" }} />
-      <Stack.Screen name="MyReviews" component={PlaceholderScreen("My Reviews")} options={{ title: "My Reviews" }} />
+      <Stack.Screen name="ClientPaymentMethods" component={ClientPaymentMethodsScreen} options={{ title: "Payment Methods" }} />
+      <Stack.Screen name="MyReviews" component={MyReviewsScreen} options={{ title: "My Reviews" }} />
       <Stack.Screen name="ClientNotifications" component={NotificationsScreen} options={{ title: "Notifications" }} />
       <Stack.Screen name="SecuritySettings" component={SecuritySettingsScreen} options={{ title: "Security" }} />
       <Stack.Screen name="HelpCenter" component={HelpCenterScreen} options={{ title: "Help Center" }} />
       <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: "Privacy Policy" }} />
       <Stack.Screen name="BookingFlow" component={BookingFlowNavigator} options={{ headerShown: false }} />
+      <Stack.Screen name="CustomerDelayResponse" component={CustomerDelayResponseScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

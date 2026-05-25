@@ -1,13 +1,15 @@
 import React from "react";
 import {
+  ActivityIndicator,
   FlatList,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   View,
   StatusBar,
 } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { getWorkerPayments } from "../../services/paymentService";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
@@ -18,24 +20,27 @@ import { useAuth } from "../../store/authStore";
 
 export function WorkerEarningsScreen() {
   const { dbUserId } = useAuth();
+  const qc = useQueryClient();
 
-  const { data: payments, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ["worker-payments", dbUserId],
-    queryFn: () => getWorkerPayments(dbUserId!),
+    queryFn: ({ pageParam = 1 }) => getWorkerPayments(dbUserId!, pageParam, 20),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
     enabled: !!dbUserId,
   });
 
-  const total = (payments ?? []).reduce((sum, p) => sum + (p.amount ?? 0), 0);
-  const thisMonth = (payments ?? [])
+  const payments = data?.pages.flatMap((p) => p.data) ?? [];
+
+  const total = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const thisMonth = payments
     .filter((p) => {
       const d = p.created_at ? new Date(p.created_at) : null;
       if (!d) return false;
       const now = new Date();
-      return (
-        d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-      );
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     })
-    .reduce((sum, p) => sum + (p.amount ?? 0), 0);
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
   return (
     <View style={styles.container}>
@@ -57,7 +62,7 @@ export function WorkerEarningsScreen() {
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statLabel}>PAYOUTS</Text>
-              <Text style={styles.statValue}>{payments?.length || 0}</Text>
+              <Text style={styles.statValue}>{payments.length}</Text>
             </View>
           </View>
         </View>
@@ -71,10 +76,13 @@ export function WorkerEarningsScreen() {
           keyExtractor={(p) => p.id}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          onEndReached={() => { if (hasNextPage) fetchNextPage(); }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={colors.brandGreen} style={{ margin: 16 }} /> : null}
           refreshControl={
             <RefreshControl
               refreshing={isLoading}
-              onRefresh={refetch}
+              onRefresh={() => { qc.removeQueries({ queryKey: ["worker-payments", dbUserId] }); refetch(); }}
               tintColor={colors.brandGreen}
             />
           }
@@ -113,7 +121,7 @@ export function WorkerEarningsScreen() {
                     : ""}
                 </Text>
               </View>
-              <Text style={styles.paymentAmount}>+${p.amount?.toFixed(2)}</Text>
+              <Text style={styles.paymentAmount}>+${Number(p.amount).toFixed(2)}</Text>
             </View>
           )}
         />

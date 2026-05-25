@@ -17,6 +17,7 @@ import { BookingStepDots } from "../../components/booking/BookingStepDots";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import { env } from "../../services/env";
+import { reverseGeocode as reverseGeocodeLatLng, geocodeAddress } from "../../services/geocodingService";
 import type { BookingFlowParamList } from "./BookingFlowNavigator";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -32,7 +33,7 @@ const DEFAULT_LNG = 79.8612;
 export function LocationSelectionScreen() {
   const route = useRoute<RouteProps>();
   const navigation = useNavigation<Nav>();
-  const { gigId, notes, imageUris } = route.params;
+  const { gigId } = route.params;
 
   const [address, setAddress] = useState("");
   const [mapRegion, setMapRegion] = useState<Region>({
@@ -53,18 +54,10 @@ export function LocationSelectionScreen() {
   });
 
   const reverseGeocode = useCallback(async (lat: number, lng: number) => {
-    if (!env.googlePlacesApiKey) return;
     setReverseGeocoding(true);
     try {
-      const res = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${env.googlePlacesApiKey}`
-      );
-      const json = await res.json();
-      const addr: string =
-        json.results?.[0]?.formatted_address ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      const addr = await reverseGeocodeLatLng(lat, lng);
       setAddress(addr);
-    } catch {
-      setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
     } finally {
       setReverseGeocoding(false);
     }
@@ -123,7 +116,7 @@ export function LocationSelectionScreen() {
           <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </Pressable>
-          <BookingStepDots currentStep={2} />
+          <BookingStepDots currentStep={1} />
         </View>
       </SafeAreaView>
 
@@ -135,24 +128,16 @@ export function LocationSelectionScreen() {
           onPress={async (data) => {
             const addr = data.description ?? data.structured_formatting?.main_text ?? "";
             setAddress(addr);
-            if (env.googlePlacesApiKey) {
-              try {
-                const res = await fetch(
-                  `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addr)}&key=${env.googlePlacesApiKey}`
-                );
-                const json = await res.json();
-                const loc = json.results?.[0]?.geometry?.location;
-                if (loc) {
-                  const newRegion: Region = {
-                    latitude: loc.lat,
-                    longitude: loc.lng,
-                    latitudeDelta: 0.01,
-                    longitudeDelta: 0.01,
-                  };
-                  setMapRegion(newRegion);
-                  mapRef.current?.animateToRegion(newRegion, 600);
-                }
-              } catch {}
+            const loc = await geocodeAddress(addr);
+            if (loc) {
+              const newRegion: Region = {
+                latitude: loc.lat,
+                longitude: loc.lng,
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01,
+              };
+              setMapRegion(newRegion);
+              mapRef.current?.animateToRegion(newRegion, 600);
             }
           }}
           query={{ key: env.googlePlacesApiKey, language: "en" }}

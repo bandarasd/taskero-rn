@@ -25,7 +25,7 @@ export function PaymentScreen() {
   const navigation = useNavigation<Nav>();
   const {
     gigId, taskerId, address, latitude, longitude,
-    scheduledAt, category, details, basePrice, notes,
+    scheduledAt, category, details, basePrice, notes, imageUris,
   } = route.params;
   const { dbUserId } = useAuth();
   const [selectedMethod, setSelectedMethod] = useState("cash");
@@ -50,7 +50,8 @@ export function PaymentScreen() {
         notes,
         details,
         status: "pending",
-      } as any);
+        payment_method: selectedMethod,
+      } as any, imageUris);
       navigation.navigate("PaymentSuccess", { taskId: task.id });
     } catch {
       toastRef.current?.show("Could not place booking. Please try again.", "error");

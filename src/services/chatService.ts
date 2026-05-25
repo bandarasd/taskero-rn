@@ -1,5 +1,5 @@
 import { apiRequest } from "./apiClient";
-import { ChatThread, APIChatMessage } from "../types";
+import { ChatThread, APIChatMessage, PaginatedResponse } from "../types";
 
 function mapMessage(m: any): APIChatMessage {
   return {
@@ -9,13 +9,20 @@ function mapMessage(m: any): APIChatMessage {
   };
 }
 
-export async function getChatThreads(userId: string) {
-  return apiRequest<ChatThread[]>(`/chat/threads/${encodeURIComponent(userId)}`);
+export async function getChatThreads(userId: string, page = 1, limit = 20) {
+  const res = await apiRequest<PaginatedResponse<ChatThread>>(
+    `/chat/threads/${encodeURIComponent(userId)}?page=${page}&limit=${limit}`
+  );
+  return res;
 }
 
-export async function getChatMessages(threadId: string) {
-  const messages = await apiRequest<any[]>(`/chat/messages/${encodeURIComponent(threadId)}`);
-  return messages.map(mapMessage);
+export async function getChatMessages(threadId: string, before?: string, limit = 30) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (before) params.set("before", before);
+  const res = await apiRequest<{ data: any[]; pagination: { limit: number; hasMore: boolean; oldestId: string | null } }>(
+    `/chat/messages/${encodeURIComponent(threadId)}?${params.toString()}`
+  );
+  return { ...res, data: res.data.map(mapMessage) };
 }
 
 export async function sendMessage(

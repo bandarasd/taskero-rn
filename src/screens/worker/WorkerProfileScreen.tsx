@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../store/authStore";
 import { Avatar } from "../../components/common/Avatar";
@@ -40,27 +40,36 @@ export function WorkerProfileScreen() {
     : user?.displayName ?? user?.email ?? "Tasker";
 
   // Data Fetching for Stats
-  const { data: tasks } = useQuery({
+  const { data: tasksData } = useInfiniteQuery({
     queryKey: ["worker-tasks", dbUserId],
-    queryFn: () => getWorkerTasks(dbUserId!),
+    queryFn: ({ pageParam = 1 }) => getWorkerTasks(dbUserId!, pageParam, 20),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
     enabled: !!dbUserId,
   });
+  const tasks = tasksData?.pages.flatMap((p) => p.data) ?? [];
 
-  const { data: payments } = useQuery({
+  const { data: paymentsData } = useInfiniteQuery({
     queryKey: ["worker-payments", dbUserId],
-    queryFn: () => getWorkerPayments(dbUserId!),
+    queryFn: ({ pageParam = 1 }) => getWorkerPayments(dbUserId!, pageParam, 20),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
     enabled: !!dbUserId,
   });
+  const payments = paymentsData?.pages.flatMap((p) => p.data) ?? [];
 
-  const { data: reviews } = useQuery({
+  const { data: reviewsData } = useInfiniteQuery({
     queryKey: ["worker-reviews", dbUserId],
-    queryFn: () => getTaskerReviews(dbUserId!),
+    queryFn: ({ pageParam = 1 }) => getTaskerReviews(dbUserId!, pageParam, 10),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
     enabled: !!dbUserId,
   });
+  const reviews = reviewsData?.pages.flatMap((p) => p.data) ?? [];
 
   // Stats Calculation
-  const jobsDone = (tasks ?? []).filter((t) => t.status === "completed").length;
-  const thisMonthEarnings = (payments ?? [])
+  const jobsDone = tasks.filter((t) => t.status === "completed").length;
+  const thisMonthEarnings = payments
     .filter((p) => {
       const d = p.created_at ? new Date(p.created_at) : null;
       if (!d) return false;
@@ -69,7 +78,7 @@ export function WorkerProfileScreen() {
         d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
       );
     })
-    .reduce((sum, p) => sum + (p.amount ?? 0), 0);
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
   const avgRating =
     reviews && reviews.length > 0
@@ -181,6 +190,14 @@ export function WorkerProfileScreen() {
               "Earnings",
               () => navigation.navigate("WorkerEarnings"),
               colors.brandGreen
+            )}
+            <View style={styles.divider} />
+            {renderMenuItem(
+              "ribbon-outline",
+              "Certifications",
+              () => navigation.navigate("WorkerCertifications"),
+              "#8B5CF6",
+              "Manage certified service categories"
             )}
           </View>
         </View>

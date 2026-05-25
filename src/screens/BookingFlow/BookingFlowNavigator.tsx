@@ -1,7 +1,6 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useRoute, RouteProp } from "@react-navigation/native";
-import { GigBookingScreen } from "./GigBookingScreen";
 import { LocationSelectionScreen } from "./LocationSelectionScreen";
 import { DateTimeSelectionScreen } from "./DateTimeSelectionScreen";
 import { ServiceSpecificBookingScreen } from "./ServiceSpecificBookingScreen";
@@ -12,8 +11,7 @@ import { ServiceCategory } from "../../types";
 import type { CustomerStackParamList } from "../../navigation/stacks/CustomerStack";
 
 export type BookingFlowParamList = {
-  GigBooking: { gigId: string };
-  LocationSelection: { gigId: string; notes?: string; imageUris?: string[] };
+  LocationSelection: { gigId: string };
   DateTimeSelection: { gigId: string; taskerId: string; address: string; latitude?: number; longitude?: number };
   ServiceSpecific: { gigId: string; taskerId: string; address: string; latitude?: number; longitude?: number; scheduledAt: string; category: ServiceCategory };
   ReviewSummary: {
@@ -27,6 +25,7 @@ export type BookingFlowParamList = {
     details: Record<string, string | number>;
     basePrice: number;
     notes?: string;
+    imageUris?: string[];
   };
   Payment: {
     gigId: string;
@@ -39,6 +38,7 @@ export type BookingFlowParamList = {
     details: Record<string, string | number>;
     basePrice: number;
     notes?: string;
+    imageUris?: string[];
   };
   PaymentSuccess: { taskId: string };
 };
@@ -57,8 +57,7 @@ export function BookingFlowNavigator() {
         headerShown: false,
       }}
     >
-      <Stack.Screen name="GigBooking" component={GigBookingScreen} initialParams={{ gigId }} />
-      <Stack.Screen name="LocationSelection" component={LocationSelectionScreen} />
+      <Stack.Screen name="LocationSelection" component={LocationSelectionScreen} initialParams={{ gigId }} />
       <Stack.Screen name="DateTimeSelection" component={DateTimeSelectionScreen} />
       <Stack.Screen name="ServiceSpecific" component={ServiceSpecificBookingScreen} />
       <Stack.Screen name="ReviewSummary" component={ReviewSummaryScreen} />

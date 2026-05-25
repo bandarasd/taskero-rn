@@ -1,6 +1,6 @@
 import React from "react";
-import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { getChatThreads } from "../../services/chatService";
@@ -17,12 +17,17 @@ type Nav = NativeStackNavigationProp<WorkerStackParamList>;
 export function WorkerMessagesScreen() {
   const { dbUserId } = useAuth();
   const navigation = useNavigation<Nav>();
+  const qc = useQueryClient();
 
-  const { data: threads, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ["threads", dbUserId],
-    queryFn: () => getChatThreads(dbUserId!),
+    queryFn: ({ pageParam = 1 }) => getChatThreads(dbUserId!, pageParam, 20),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
     enabled: !!dbUserId,
   });
+
+  const threads = data?.pages.flatMap((p) => p.data) ?? [];
 
   return (
     <View style={styles.container}>
@@ -35,7 +40,15 @@ export function WorkerMessagesScreen() {
         <FlatList
           data={threads}
           keyExtractor={(t) => t.id}
-          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={isLoading}
+              onRefresh={() => { qc.removeQueries({ queryKey: ["threads", dbUserId] }); refetch(); }}
+            />
+          }
+          onEndReached={() => { if (hasNextPage) fetchNextPage(); }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={colors.brandGreen} style={{ margin: 16 }} /> : null}
           ListEmptyComponent={<EmptyState icon="💬" title="No messages yet" message="Your customer conversations will appear here." />}
           renderItem={({ item }) => (
             <ThreadListItem

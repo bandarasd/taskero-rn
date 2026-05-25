@@ -18,6 +18,7 @@ export async function getSchedule(taskerId: string): Promise<TaskerSchedule> {
     is_available: row.is_active,
     start_time: row.start_time,
     end_time: row.end_time,
+    buffer_minutes: row.buffer_minutes ?? 30,
   })) as TaskerSchedule;
 }
 
@@ -27,12 +28,19 @@ export async function updateSchedule(taskerId: string, schedule: TaskerSchedule)
     is_active: entry.is_available,
     start_time: entry.start_time ?? "08:00",
     end_time: entry.end_time ?? "18:00",
+    buffer_minutes: entry.buffer_minutes ?? 30,
   }));
 
   return apiRequest<TaskerSchedulePayloadEntry[]>(
     `/taskers/${encodeURIComponent(taskerId)}/schedule`,
     { method: "PUT", body: payload }
   );
+}
+
+export async function updateGracePeriod(taskerId: string, minutes: number) {
+  const schedule = await getSchedule(taskerId);
+  const updated = schedule.map((entry) => ({ ...entry, buffer_minutes: minutes }));
+  return updateSchedule(taskerId, updated);
 }
 
 export async function getAvailableSlots(taskerId: string, date: string) {

@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../store/authStore";
 import { Avatar } from "../components/common/Avatar";
@@ -33,18 +33,21 @@ export function ProfileScreen() {
     enabled: !!dbUserId,
   });
 
-  const { data: tasks } = useQuery({
-    queryKey: ["customer-tasks", dbUserId],
-    queryFn: () => getCustomerTasks(dbUserId!),
+  const { data: tasksData } = useInfiniteQuery({
+    queryKey: ["tasks", "customer", dbUserId],
+    queryFn: ({ pageParam = 1 }) => getCustomerTasks(dbUserId!, pageParam, 20),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
     enabled: !!dbUserId,
   });
+  const tasks = tasksData?.pages.flatMap((p) => p.data) ?? [];
 
   const displayName = dbUser
     ? `${dbUser.first_name ?? ""} ${dbUser.last_name ?? ""}`.trim() || user?.email || "Customer"
     : user?.displayName ?? user?.email ?? "Customer";
 
-  const totalBookings = tasks?.length ?? 0;
-  const completedTasks = tasks?.filter((t) => t.status === "completed").length ?? 0;
+  const totalBookings = tasks.length;
+  const completedTasks = tasks.filter((t) => t.status === "completed").length;
   const pendingTasks = tasks?.filter((t) => t.status === "pending" || t.status === "active").length ?? 0;
 
   const handleSignOut = () => {

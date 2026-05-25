@@ -16,6 +16,7 @@ import { GooglePlacesAutocomplete } from "react-native-google-places-autocomplet
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import { env } from "../services/env";
+import { reverseGeocode as reverseGeocodeLatLng, geocodeAddress } from "../services/geocodingService";
 
 const DEFAULT_REGION: Region = {
   latitude: 6.9271,
@@ -40,18 +41,10 @@ export function LocationSelectionModal({ visible, onClose, onConfirm }: Props) {
   const [locating, setLocating] = useState(false);
 
   const reverseGeocode = useCallback(async (lat: number, lng: number) => {
-    if (!env.googlePlacesApiKey) return;
     setReverseGeocoding(true);
     try {
-      const res = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${env.googlePlacesApiKey}`
-      );
-      const json = await res.json();
-      const address: string =
-        json.results?.[0]?.formatted_address ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      const address = await reverseGeocodeLatLng(lat, lng);
       setPendingAddress(address);
-    } catch {
-      setPendingAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
     } finally {
       setReverseGeocoding(false);
     }
@@ -116,24 +109,16 @@ export function LocationSelectionModal({ visible, onClose, onConfirm }: Props) {
                   const address =
                     data.description ?? data.structured_formatting?.main_text ?? "";
                   setPendingAddress(address);
-                  if (env.googlePlacesApiKey) {
-                    try {
-                      const res = await fetch(
-                        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${env.googlePlacesApiKey}`
-                      );
-                      const json = await res.json();
-                      const loc = json.results?.[0]?.geometry?.location;
-                      if (loc) {
-                        const newRegion = {
-                          latitude: loc.lat,
-                          longitude: loc.lng,
-                          latitudeDelta: 0.01,
-                          longitudeDelta: 0.01,
-                        };
-                        setMapRegion(newRegion);
-                        mapRef.current?.animateToRegion(newRegion, 600);
-                      }
-                    } catch {}
+                  const loc = await geocodeAddress(address);
+                  if (loc) {
+                    const newRegion = {
+                      latitude: loc.lat,
+                      longitude: loc.lng,
+                      latitudeDelta: 0.01,
+                      longitudeDelta: 0.01,
+                    };
+                    setMapRegion(newRegion);
+                    mapRef.current?.animateToRegion(newRegion, 600);
                   }
                 }}
                 query={{ key: env.googlePlacesApiKey, language: "en" }}

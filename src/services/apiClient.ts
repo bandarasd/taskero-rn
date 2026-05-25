@@ -74,7 +74,11 @@ export async function apiRequest<T>(
   return (await response.json()) as T;
 }
 
-export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+  method: "POST" | "PUT" = "POST"
+): Promise<T> {
   if (!env.apiBaseUrl) throw new Error("Missing EXPO_PUBLIC_API_BASE_URL");
   if (!firebaseAuth.currentUser) throw new ApiError(401, "Not authenticated");
   const token = await withTimeout(
@@ -84,12 +88,12 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
   );
   const response = await withTimeout(
     fetch(`${env.apiBaseUrl}${path}`, {
-      method: "POST",
+      method,
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
     }),
     REQUEST_TIMEOUT_MS,
-    `POST ${path}`
+    `${method} ${path}`
   );
   if (!response.ok) {
     const message = await parseErrorMessage(response);

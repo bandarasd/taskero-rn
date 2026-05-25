@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { getGigById } from "../services/gigService";
@@ -43,18 +43,21 @@ export function ServiceDetailScreen() {
   });
 
   const insets = useSafeAreaInsets();
-  const { data: reviews } = useQuery({
+  const { data: reviewsData } = useInfiniteQuery({
     queryKey: ["reviews", "gig", gigId],
-    queryFn: () => getGigReviews(gigId),
+    queryFn: ({ pageParam = 1 }) => getGigReviews(gigId, pageParam, 10),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
     enabled: !!gigId,
   });
+  const reviews = reviewsData?.pages.flatMap((p) => p.data) ?? [];
 
   const avgRating = gig?.rating ?? 0;
-  const reviewCount = reviews?.length ?? 0;
+  const reviewCount = reviews.length;
 
   // Star breakdown calculation
   const ratingCounts = [0, 0, 0, 0, 0]; // 5, 4, 3, 2, 1
-  reviews?.forEach((r) => {
+  reviews.forEach((r) => {
     const star = Math.round(r.rating);
     if (star >= 1 && star <= 5) {
       ratingCounts[5 - star]++;
@@ -150,14 +153,6 @@ export function ServiceDetailScreen() {
             </Text>
           </View>
 
-          {/* Rating row */}
-          <View style={styles.ratingRow}>
-            <StarRating value={gig.rating ?? 0} size={14} />
-            <Text style={styles.ratingText}>
-              {gig.rating?.toFixed(1) ?? "0.0"} ({gig.review_count ?? 0} reviews)
-            </Text>
-          </View>
-
           {/* Worker strip */}
           <View style={styles.workerStrip}>
             <Avatar uri={gig.tasker?.avatar_url} name={workerName} size={44} />
@@ -170,6 +165,15 @@ export function ServiceDetailScreen() {
                     <Text style={styles.workerRatingText}>
                       {gig.tasker?.rating?.toFixed(1) ?? "—"} ({gig.tasker?.review_count ?? 0})
                     </Text>
+                    {gig.tasker?.completion_rate != null && (
+                      <>
+                        <Text style={[styles.workerRatingText, { color: colors.borderLight }]}>  ·  </Text>
+                        <Ionicons name="checkmark-circle-outline" size={12} color={colors.brandGreen} />
+                        <Text style={[styles.workerRatingText, { color: colors.brandGreen }]}>
+                          {gig.tasker.completion_rate}% completion
+                        </Text>
+                      </>
+                    )}
                   </View>
                 </View>
                 <Pressable style={styles.viewProfileBtn}>

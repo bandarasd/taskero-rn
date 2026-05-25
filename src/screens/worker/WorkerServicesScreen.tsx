@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
@@ -10,7 +11,7 @@ import {
   StatusBar,
   Image,
 } from "react-native";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
@@ -26,19 +27,20 @@ import type { WorkerStackParamList } from "../../navigation/stacks/WorkerStack";
 
 type Nav = NativeStackNavigationProp<WorkerStackParamList>;
 
-// Removed CATEGORY_IMAGES fallback map as per redesign requirements.
-
-
 export function WorkerServicesScreen() {
   const { dbUserId } = useAuth();
   const navigation = useNavigation<Nav>();
   const qc = useQueryClient();
 
-  const { data: gigs, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ["worker-gigs", dbUserId],
-    queryFn: () => getWorkerGigs(dbUserId!),
+    queryFn: ({ pageParam = 1 }) => getWorkerGigs(dbUserId!, pageParam, 20),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
     enabled: !!dbUserId,
   });
+
+  const gigs = data?.pages.flatMap((p) => p.data) ?? [];
 
   const toggleStatus = async (gig: Gig) => {
     const isActive = gig.status?.toLowerCase() === "active" || !gig.status;
@@ -91,10 +93,13 @@ export function WorkerServicesScreen() {
           keyExtractor={(g) => g.id}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          onEndReached={() => { if (hasNextPage) fetchNextPage(); }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={colors.brandGreen} style={{ margin: 16 }} /> : null}
           refreshControl={
             <RefreshControl
               refreshing={isLoading}
-              onRefresh={refetch}
+              onRefresh={() => { qc.removeQueries({ queryKey: ["worker-gigs", dbUserId] }); refetch(); }}
               tintColor={colors.brandGreen}
             />
           }

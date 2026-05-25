@@ -1,5 +1,13 @@
 import React, { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
@@ -8,7 +16,6 @@ import { getGigById } from "../../services/gigService";
 import { BookingStepDots } from "../../components/booking/BookingStepDots";
 import { StickyPriceCTA } from "../../components/booking/StickyPriceCTA";
 import { DateChip } from "../../components/booking/DateChip";
-import { TimeSlotChip } from "../../components/booking/TimeSlotChip";
 import { SkeletonCard } from "../../components/booking/SkeletonCard";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
@@ -26,9 +33,12 @@ function isoDateString(date: Date) {
 
 function formatSlot(slot: string) {
   const [h, m] = slot.split(":").map(Number);
-  const period = h >= 12 ? "PM" : "AM";
-  const hour = h % 12 || 12;
-  return `${hour}:${m.toString().padStart(2, "0")} ${period}`;
+  const d = new Date();
+  d.setUTCHours(h, m, 0, 0);
+  const localH = d.getHours();
+  const period = localH >= 12 ? "PM" : "AM";
+  const hour = localH % 12 || 12;
+  return `${hour}:${d.getMinutes().toString().padStart(2, "0")} ${period}`;
 }
 
 function isAM(slot: string) {
@@ -61,12 +71,12 @@ export function DateTimeSelectionScreen() {
   const amSlots = slots.filter(isAM);
   const pmSlots = slots.filter((s) => !isAM(s));
 
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
   const buildScheduledAt = () => {
     if (!selectedDate || !selectedSlot) return "";
-    const [h, m] = selectedSlot.split(":").map(Number);
-    const d = new Date(selectedDate);
-    d.setHours(h, m, 0, 0);
-    return d.toISOString();
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    return `${dateStr}T${selectedSlot}:00.000Z`;
   };
 
   return (
@@ -76,7 +86,7 @@ export function DateTimeSelectionScreen() {
           <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </Pressable>
-          <BookingStepDots currentStep={3} />
+          <BookingStepDots currentStep={2} />
         </View>
       </SafeAreaView>
 
@@ -104,13 +114,9 @@ export function DateTimeSelectionScreen() {
         {selectedDate && (
           <View style={styles.slotsSection}>
             <Text style={styles.sectionLabel}>Available times</Text>
-            
+
             {slotsLoading ? (
-              <View style={styles.slotsGrid}>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <SkeletonCard key={i} variant="timeslot" />
-                ))}
-              </View>
+              <SkeletonCard variant="timeslot" />
             ) : slots.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="calendar-outline" size={48} color={colors.placeholder} />
@@ -119,37 +125,63 @@ export function DateTimeSelectionScreen() {
               </View>
             ) : (
               <>
-                {amSlots.length > 0 && (
-                  <View style={styles.periodSection}>
-                    <Text style={styles.periodLabel}>Morning</Text>
-                    <View style={styles.slotsGrid}>
-                      {amSlots.map((slot) => (
-                        <TimeSlotChip
-                          key={slot}
-                          time={formatSlot(slot)}
-                          selected={selectedSlot === slot}
-                          onPress={() => setSelectedSlot(slot)}
-                        />
-                      ))}
-                    </View>
+                <Pressable
+                  style={[styles.dropdownTrigger, dropdownOpen && styles.dropdownTriggerOpen]}
+                  onPress={() => setDropdownOpen(true)}
+                >
+                  <View style={styles.dropdownTriggerLeft}>
+                    <Ionicons name="time-outline" size={20} color={selectedSlot ? colors.brandGreen : colors.placeholder} />
+                    <Text style={[styles.dropdownTriggerText, !selectedSlot && styles.dropdownPlaceholder]}>
+                      {selectedSlot ? formatSlot(selectedSlot) : "Select a time"}
+                    </Text>
                   </View>
-                )}
+                  <Ionicons name="chevron-down" size={18} color={colors.subtext} />
+                </Pressable>
 
-                {pmSlots.length > 0 && (
-                  <View style={styles.periodSection}>
-                    <Text style={styles.periodLabel}>Afternoon & Evening</Text>
-                    <View style={styles.slotsGrid}>
-                      {pmSlots.map((slot) => (
-                        <TimeSlotChip
-                          key={slot}
-                          time={formatSlot(slot)}
-                          selected={selectedSlot === slot}
-                          onPress={() => setSelectedSlot(slot)}
-                        />
-                      ))}
+                <Modal
+                  visible={dropdownOpen}
+                  transparent
+                  animationType="fade"
+                  onRequestClose={() => setDropdownOpen(false)}
+                >
+                  <Pressable style={styles.modalOverlay} onPress={() => setDropdownOpen(false)}>
+                    <View style={styles.dropdownSheet}>
+                      <View style={styles.dropdownHeader}>
+                        <Text style={styles.dropdownHeaderTitle}>Select a time</Text>
+                        <Pressable onPress={() => setDropdownOpen(false)}>
+                          <Ionicons name="close" size={22} color={colors.text} />
+                        </Pressable>
+                      </View>
+                      <FlatList
+                        data={[
+                          ...(amSlots.length > 0 ? [{ type: "header" as const, label: "Morning" }, ...amSlots.map((s) => ({ type: "slot" as const, value: s }))] : []),
+                          ...(pmSlots.length > 0 ? [{ type: "header" as const, label: "Afternoon & Evening" }, ...pmSlots.map((s) => ({ type: "slot" as const, value: s }))] : []),
+                        ]}
+                        keyExtractor={(item, i) => String(i)}
+                        renderItem={({ item }) => {
+                          if (item.type === "header") {
+                            return <Text style={styles.dropdownGroupLabel}>{item.label}</Text>;
+                          }
+                          const isSelected = selectedSlot === item.value;
+                          return (
+                            <Pressable
+                              style={[styles.dropdownItem, isSelected && styles.dropdownItemSelected]}
+                              onPress={() => {
+                                setSelectedSlot(item.value);
+                                setDropdownOpen(false);
+                              }}
+                            >
+                              <Text style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextSelected]}>
+                                {formatSlot(item.value)}
+                              </Text>
+                              {isSelected && <Ionicons name="checkmark" size={18} color={colors.brandGreen} />}
+                            </Pressable>
+                          );
+                        }}
+                      />
                     </View>
-                  </View>
-                )}
+                  </Pressable>
+                </Modal>
               </>
             )}
           </View>
@@ -233,19 +265,87 @@ const styles = StyleSheet.create({
   slotsSection: {
     marginBottom: spacing.xl,
   },
-  periodSection: {
-    marginBottom: spacing.md,
-  },
-  periodLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.subtext,
-    marginBottom: spacing.sm,
-  },
-  slotsGrid: {
+  dropdownTrigger: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    marginHorizontal: -spacing.xs,
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.background,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  dropdownTriggerOpen: {
+    borderColor: colors.brandGreen,
+  },
+  dropdownTriggerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  dropdownTriggerText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.text,
+    marginLeft: spacing.sm,
+  },
+  dropdownPlaceholder: {
+    color: colors.placeholder,
+    fontWeight: "400",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  dropdownSheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    maxHeight: "60%",
+    paddingBottom: spacing.xl,
+  },
+  dropdownHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  dropdownHeaderTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  dropdownGroupLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.subtext,
+    textTransform: "uppercase",
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  dropdownItemSelected: {
+    backgroundColor: colors.brandGreenLight,
+  },
+  dropdownItemText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  dropdownItemTextSelected: {
+    color: colors.brandGreen,
+    fontWeight: "600",
   },
   emptyState: {
     alignItems: "center",

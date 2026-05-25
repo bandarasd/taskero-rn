@@ -16,6 +16,9 @@ export type ApiUser = {
   bio?: string | null;
   rating?: number | null;
   review_count?: number | null;
+  completed_jobs?: number | null;
+  no_show_cancellations?: number | null;
+  completion_rate?: number | null;
   firebase_uid?: string | null;
   created_at?: string | null;
 };
@@ -34,6 +37,9 @@ export type ServiceCategory =
   | "Moving"
   | "Gardening"
   | "General";
+
+// Categories that require admin-approved certification before a worker can post gigs
+export const CERTIFIED_CATEGORIES: ServiceCategory[] = ["Electrician", "Plumbing"];
 
 export const SERVICE_CATEGORIES: ServiceCategory[] = [
   "Cleaning",
@@ -92,6 +98,7 @@ export type TaskStatus =
   | "quoted"
   | "accepted"
   | "in_progress"
+  | "payment_pending"
   | "completed"
   | "canceled"
   | "declined";
@@ -109,12 +116,20 @@ export type APITask = {
   location_latitude?: number | null;
   location_longitude?: number | null;
   scheduled_at?: string | null;
+  started_at?: string | null;
   completed_at?: string | null;
   base_price?: number | null;
   quoted_price?: number | null;
   quote_expires_at?: string | null;
   final_price?: number | null;
+  extra_charges?: { description: string; amount: number }[] | null;
   notes?: string | null;
+  details?: Record<string, any> | null;
+  estimated_duration_minutes?: number | null;
+  payment_method?: 'cash' | 'card' | null;
+  overrun_notified_at?: string | null;
+  delay_response?: 'wait' | 'cancel' | 'reschedule' | null;
+  tasker_new_eta?: string | null;
   attachments?: string[];
   customer?: ApiUser | null;
   tasker?: ApiUser | null;
@@ -134,6 +149,7 @@ export type TaskerScheduleEntry = {
   is_available: boolean;
   start_time?: string | null; // "HH:mm"
   end_time?: string | null;   // "HH:mm"
+  buffer_minutes?: number;
 };
 
 export type TaskerSchedule = TaskerScheduleEntry[];
@@ -205,6 +221,20 @@ export type Payment = {
   stripe_payment_intent_id?: string | null;
   created_at?: string;
 };
+
+// ─── Pagination ───────────────────────────────────────────────────────────────
+
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: PaginationMeta;
+}
 
 // ─── Notification ─────────────────────────────────────────────────────────────
 

@@ -1,15 +1,18 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View, TouchableOpacity, Linking, Platform } from "react-native";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { getTaskById, respondToQuote } from "../services/taskService";
+import { usePaymentSheet } from "@stripe/stripe-react-native";
+import { getTaskById, respondToQuote, updateTaskStatus } from "../services/taskService";
+import { createPaymentIntent, recordPayment, createOfflinePayment } from "../services/paymentService";
 import { getUserById } from "../services/userService";
 import { createThread } from "../services/chatService";
+import { createReview, getTaskReviews } from "../services/reviewService";
 import { useAuth } from "../store/authStore";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { Avatar } from "../components/common/Avatar";
@@ -18,6 +21,7 @@ import { colors } from "../theme/colors";
 import { spacing } from "../theme/spacing";
 import { TaskStatus } from "../types";
 import type { CustomerStackParamList } from "../navigation/stacks/CustomerStack";
+import { RateTaskerModal } from "../components/rating/RateTaskerModal";
 
 type RouteProps = RouteProp<CustomerStackParamList, "AppointmentDetail">;
 type Nav = NativeStackNavigationProp<CustomerStackParamList>;
@@ -47,6 +51,7 @@ const JOURNEY_STEPS: { key: TaskStatus; label: string }[] = [
   { key: "quoted", label: "Quoted" },
   { key: "accepted", label: "Accepted" },
   { key: "in_progress", label: "In Progress" },
+  { key: "payment_pending", label: "Pay Now" },
   { key: "completed", label: "Completed" },
 ];
 
@@ -155,11 +160,16 @@ export function AppointmentDetailScreen() {
   const insets = useSafeAreaInsets();
   const [respondLoading, setRespondLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [paymentConfirming, setPaymentConfirming] = useState(false);
+  const [ratingModalVisible, setRatingModalVisible] = useState(false);
+  const [alreadyRated, setAlreadyRated] = useState(false);
   const { dbUserId } = useAuth();
 
   const { data: task, isLoading } = useQuery({
     queryKey: ["task", taskId],
     queryFn: () => getTaskById(taskId),
+    refetchInterval: 30_000,
   });
 
   const { data: tasker } = useQuery({
@@ -168,14 +178,87 @@ export function AppointmentDetailScreen() {
     enabled: !!task?.tasker_id,
   });
 
+  const { data: existingReviewsData } = useInfiniteQuery({
+    queryKey: ["reviews", "task", taskId],
+    queryFn: ({ pageParam = 1 }) => getTaskReviews(taskId, pageParam, 10),
+    getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
+    initialPageParam: 1,
+    enabled: task?.status === "completed",
+  });
+  const existingReviews = existingReviewsData?.pages.flatMap((p) => p.data);
+
+  useEffect(() => {
+    if (task?.status === "completed" && existingReviews !== undefined) {
+      const hasReview = existingReviews.length > 0;
+      setAlreadyRated(hasReview);
+      if (!hasReview) setRatingModalVisible(true);
+    }
+  }, [task?.status, existingReviews]);
+
+  const handleReviewSubmit = async (rating: number, tags: string[], body: string) => {
+    const tagSuffix = tags.length ? ` [${tags.join(", ")}]` : "";
+    const combined = (body + tagSuffix).trim();
+    await createReview({ task_id: taskId, tasker_id: task!.tasker_id!, rating, body: combined });
+    await qc.invalidateQueries({ queryKey: ["reviews", "task", taskId] });
+  };
+
+  const { initPaymentSheet, presentPaymentSheet } = usePaymentSheet();
+
   const handleRespond = async (accepted: boolean) => {
+    if (!accepted) {
+      setRespondLoading(true);
+      try {
+        await respondToQuote(taskId, false);
+        await qc.invalidateQueries({ queryKey: ["task", taskId] });
+        await qc.invalidateQueries({ queryKey: ["tasks"] });
+      } catch {
+        Alert.alert("Error", "Could not decline quote");
+      } finally {
+        setRespondLoading(false);
+      }
+      return;
+    }
+
     setRespondLoading(true);
     try {
-      await respondToQuote(taskId, accepted);
+      if (task!.payment_method === "card") {
+        const { client_secret, payment_intent_id } = await createPaymentIntent(taskId, task!.quoted_price!);
+        const { error: initError } = await initPaymentSheet({
+          paymentIntentClientSecret: client_secret,
+          merchantDisplayName: "Taskero",
+        });
+        if (initError) {
+          Alert.alert("Payment Error", initError.message);
+          return;
+        }
+        const { error: presentError } = await presentPaymentSheet();
+        if (presentError) {
+          if (presentError.code !== "Canceled") Alert.alert("Payment Failed", presentError.message);
+          return;
+        }
+        await Promise.all([
+          recordPayment({
+            task_id: taskId,
+            customer_id: dbUserId!,
+            tasker_id: task!.tasker_id!,
+            amount: task!.quoted_price!,
+            stripe_payment_intent_id: payment_intent_id,
+          }),
+          respondToQuote(taskId, true),
+        ]);
+      } else {
+        await respondToQuote(taskId, true);
+        await createOfflinePayment({
+          task_id: taskId,
+          customer_id: dbUserId!,
+          tasker_id: task!.tasker_id!,
+          amount: task!.quoted_price!,
+        });
+      }
       await qc.invalidateQueries({ queryKey: ["task", taskId] });
       await qc.invalidateQueries({ queryKey: ["tasks"] });
     } catch {
-      Alert.alert("Error", "Could not respond to quote");
+      Alert.alert("Error", "Could not accept quote");
     } finally {
       setRespondLoading(false);
     }
@@ -192,6 +275,21 @@ export function AppointmentDetailScreen() {
       Alert.alert("Error", "Could not open conversation");
     } finally {
       setMessageLoading(false);
+    }
+  };
+
+  const handleConfirmCashPayment = async () => {
+    setPaymentConfirming(true);
+    try {
+      const finalAmt = Number(task!.final_price ?? task!.quoted_price ?? task!.base_price ?? 0);
+      await updateTaskStatus(taskId, "completed", finalAmt);
+      setPaymentConfirmed(true);
+      await qc.invalidateQueries({ queryKey: ["task", taskId] });
+      await qc.invalidateQueries({ queryKey: ["tasks"] });
+    } catch {
+      Alert.alert("Error", "Could not confirm payment");
+    } finally {
+      setPaymentConfirming(false);
     }
   };
 
@@ -222,6 +320,18 @@ export function AppointmentDetailScreen() {
         >
           <Text style={styles.heroTitle}>{task.gig_title ?? task.gig?.title ?? task.title ?? "Service"}</Text>
         </LinearGradient>
+
+        {/* Delay banner — shown when tasker is running late and customer hasn't responded */}
+        {task.overrun_notified_at && !task.delay_response && (
+          <TouchableOpacity
+            style={styles.delayBanner}
+            onPress={() => navigation.navigate("CustomerDelayResponse", { taskId: task.id })}
+          >
+            <Ionicons name="warning-outline" size={18} color="#92400E" />
+            <Text style={styles.delayBannerText}>Your tasker is running late — tap to respond</Text>
+            <Ionicons name="chevron-forward" size={16} color="#92400E" />
+          </TouchableOpacity>
+        )}
 
         {/* 2. Status Journey Strip */}
         <StatusJourney currentStatus={task.status} />
@@ -313,6 +423,72 @@ export function AppointmentDetailScreen() {
           )}
         </View>
 
+        {/* 6a. Completion Payment Banner (if status === "completed") */}
+        {(task.status === "payment_pending" || task.status === "completed") && (() => {
+          const isCash = task.payment_method !== "card";
+          const finalAmt = Number(task.final_price ?? task.quoted_price ?? task.base_price ?? 0);
+          const quotedAmt = Number(task.quoted_price ?? task.base_price ?? 0);
+          const hasExtra = finalAmt > quotedAmt;
+          const extraAmt = finalAmt - quotedAmt;
+          const alreadyConfirmed = paymentConfirmed || task.status === "completed";
+
+          return (
+            <View style={styles.completionBanner}>
+              <View style={styles.completionBannerHeader}>
+                <Ionicons name="checkmark-circle" size={22} color={colors.brandGreen} />
+                <Text style={styles.completionBannerTitle}>
+                  {isCash ? (alreadyConfirmed ? "Payment Confirmed" : "Confirm Your Payment") : "Payment Summary"}
+                </Text>
+              </View>
+
+              <View style={styles.completionAmountRow}>
+                <Text style={styles.completionBaseLabel}>
+                  {isCash ? "Amount to pay" : "💳 Charged to card"}
+                </Text>
+                <Text style={styles.completionBaseAmt}>Rs. {quotedAmt.toLocaleString()}</Text>
+              </View>
+
+              {hasExtra && (
+                <View style={styles.completionAmountRow}>
+                  <Text style={styles.completionExtraLabel}>Extra charges</Text>
+                  <Text style={styles.completionExtraAmt}>+ Rs. {extraAmt.toLocaleString()}</Text>
+                </View>
+              )}
+
+              <View style={styles.completionTotalRow}>
+                <Text style={styles.completionTotalLabel}>Total</Text>
+                <Text style={styles.completionTotalAmt}>Rs. {finalAmt.toLocaleString()}</Text>
+              </View>
+
+              {isCash && !alreadyConfirmed && (
+                <TouchableOpacity
+                  style={[styles.confirmPayBtn, paymentConfirming && { opacity: 0.6 }]}
+                  onPress={handleConfirmCashPayment}
+                  disabled={paymentConfirming}
+                >
+                  <Text style={styles.confirmPayBtnText}>
+                    {paymentConfirming ? "Confirming…" : `Confirm I Paid Rs. ${finalAmt.toLocaleString()} to ${workerName}`}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {isCash && alreadyConfirmed && (
+                <View style={styles.paidConfirmedRow}>
+                  <Ionicons name="checkmark-circle-outline" size={16} color={colors.brandGreen} />
+                  <Text style={styles.paidConfirmedText}>Cash payment confirmed</Text>
+                </View>
+              )}
+
+              {!isCash && (
+                <View style={styles.paidConfirmedRow}>
+                  <Ionicons name="checkmark-circle-outline" size={16} color={colors.brandGreen} />
+                  <Text style={styles.paidConfirmedText}>Charged to your card on file</Text>
+                </View>
+              )}
+            </View>
+          );
+        })()}
+
         {/* 6. Quote Action Banner (if status === "quoted") */}
         {task.status === "quoted" && (
           <View style={styles.quoteBanner}>
@@ -331,6 +507,18 @@ export function AppointmentDetailScreen() {
                 </Text>
               </View>
             )}
+            <View style={styles.paymentMethodNote}>
+              <Ionicons
+                name={task.payment_method === "card" ? "card-outline" : "cash-outline"}
+                size={14}
+                color={colors.subtext}
+              />
+              <Text style={styles.paymentMethodNoteText}>
+                {task.payment_method === "card"
+                  ? "Card payment will be charged on acceptance"
+                  : "Pay cash after the service is done"}
+              </Text>
+            </View>
             <View style={styles.quoteActions}>
               <Button
                 label="Decline"
@@ -368,16 +556,38 @@ export function AppointmentDetailScreen() {
             fullWidth
           />
         )}
+        {task.status === "payment_pending" && (
+          <View style={styles.disabledBar}>
+            <Text style={[styles.disabledBarText, { color: colors.brandGreen }]}>
+              Job done — scroll up to confirm payment
+            </Text>
+          </View>
+        )}
         {task.status === "completed" && (
-          <Button
-            label="Book Again"
-            onPress={() => {
-              if (task.gig_id) {
-                navigation.navigate("ServiceDetail", { gigId: task.gig_id });
-              }
-            }}
-            fullWidth
-          />
+          <View style={{ gap: 8 }}>
+            {alreadyRated ? (
+              <View style={styles.reviewedPill}>
+                <Ionicons name="checkmark-circle" size={16} color={colors.brandGreen} />
+                <Text style={styles.reviewedPillText}>Reviewed</Text>
+              </View>
+            ) : (
+              <Button
+                label={`Rate ${workerName}`}
+                onPress={() => setRatingModalVisible(true)}
+                fullWidth
+              />
+            )}
+            <Button
+              label="Book Again"
+              variant="outline"
+              onPress={() => {
+                if (task.gig_id) {
+                  navigation.navigate("ServiceDetail", { gigId: task.gig_id });
+                }
+              }}
+              fullWidth
+            />
+          </View>
         )}
         {(task.status === "canceled" || task.status === "declined") && (
           <Button
@@ -388,6 +598,14 @@ export function AppointmentDetailScreen() {
           />
         )}
       </View>}
+
+      <RateTaskerModal
+        visible={ratingModalVisible}
+        onClose={() => setRatingModalVisible(false)}
+        onSubmit={handleReviewSubmit}
+        taskerName={workerName}
+        taskerAvatar={tasker?.avatar_url}
+      />
     </View>
   );
 }
@@ -395,7 +613,28 @@ export function AppointmentDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFFFFF" },
   scrollView: { flex: 1 },
-  
+
+  // Delay banner
+  delayBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FEF3C7",
+    borderLeftWidth: 4,
+    borderLeftColor: "#F59E0B",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 10,
+  },
+  delayBannerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#92400E",
+  },
+
   // Hero
   hero: {
     height: 220,
@@ -498,6 +737,20 @@ const styles = StyleSheet.create({
   workerRow: { flexDirection: "row", alignItems: "center" },
   workerInfo: { flex: 1, marginLeft: 16 },
   workerName: { fontSize: 18, fontWeight: "700", color: colors.text },
+  reviewedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: colors.brandGreenLight,
+  },
+  reviewedPillText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.brandGreen,
+  },
   workerSubtitle: { fontSize: 13, color: colors.subtext, marginTop: 2 },
   ratingRow: { flexDirection: "row", marginTop: 4 },
   messageLink: { flexDirection: "row", alignItems: "center", paddingVertical: 8 },
@@ -534,6 +787,64 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: 18, fontWeight: "800", color: colors.brandGreen },
   pendingQuoteText: { fontSize: 14, color: colors.subtext, fontStyle: "italic", marginTop: 4 },
 
+  // Completion Payment Banner
+  completionBanner: {
+    margin: 16,
+    padding: 20,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: colors.brandGreen + "40",
+    shadowColor: colors.brandGreen,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  completionBannerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 16,
+  },
+  completionBannerTitle: { fontSize: 16, fontWeight: "800", color: colors.text },
+  completionAmountRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  completionBaseLabel: { fontSize: 14, color: colors.subtext },
+  completionBaseAmt: { fontSize: 14, fontWeight: "600", color: colors.text },
+  completionExtraLabel: { fontSize: 14, color: colors.warning },
+  completionExtraAmt: { fontSize: 14, fontWeight: "600", color: colors.warning },
+  completionTotalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+    marginBottom: 16,
+  },
+  completionTotalLabel: { fontSize: 16, fontWeight: "700", color: colors.text },
+  completionTotalAmt: { fontSize: 22, fontWeight: "800", color: colors.brandGreen },
+  confirmPayBtn: {
+    backgroundColor: "#1A1A2E",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  confirmPayBtnText: { fontSize: 14, fontWeight: "700", color: "#fff", textAlign: "center", paddingHorizontal: 8 },
+  paidConfirmedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    justifyContent: "center",
+  },
+  paidConfirmedText: { fontSize: 13, color: colors.brandGreen, fontWeight: "600" },
+
   // Quote Banner
   quoteBanner: {
     margin: 16,
@@ -546,6 +857,8 @@ const styles = StyleSheet.create({
   quoteAmount: { fontSize: 40, fontWeight: "800", color: colors.brandGreen, marginBottom: 20 },
   expiryRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 16 },
   expiryText: { fontSize: 13, color: colors.warning, fontWeight: "600" },
+  paymentMethodNote: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 },
+  paymentMethodNoteText: { fontSize: 12, color: colors.subtext, flex: 1 },
   quoteActions: { flexDirection: "row", gap: 12, width: "100%" },
   quoteActionBtn: { flex: 1 },
 
