@@ -30,7 +30,8 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import { useAuth } from "../../store/authStore";
-import { APINotification, APITask, CATEGORY_ICONS, Gig } from "../../types";
+import { APINotification, APITask, Gig } from "../../types";
+import { useCategoryByName } from "../../hooks/useCategories";
 import type { WorkerStackParamList } from "../../navigation/stacks/WorkerStack";
 
 type Nav = NativeStackNavigationProp<WorkerStackParamList>;
@@ -125,10 +126,10 @@ function SectionHead({
 // ─── Gig icon bubble ────────────────────────────────────────────────────────
 
 function GigBubble({ gig }: { gig: Gig }) {
-  const icon = CATEGORY_ICONS[gig.category as keyof typeof CATEGORY_ICONS] ?? "✨";
+  const { data: cat } = useCategoryByName(gig.category);
   return (
     <View style={styles.gigBubble}>
-      <Text style={{ fontSize: 20 }}>{icon}</Text>
+      <Text style={{ fontSize: 20 }}>{cat?.icon ?? "✨"}</Text>
     </View>
   );
 }

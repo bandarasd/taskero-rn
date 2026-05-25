@@ -19,23 +19,11 @@ import { Button } from "../../components/common/Button";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import { useAuth } from "../../store/authStore";
-import { CATEGORY_ICONS, ServiceCategory } from "../../types";
+import { useCategoryByName } from "../../hooks/useCategories";
 import type { WorkerStackParamList } from "../../navigation/stacks/WorkerStack";
 
 type RouteProps = RouteProp<WorkerStackParamList, "RequestCertification">;
 
-const CERT_REQUIREMENTS: Record<string, string[]> = {
-  Electrician: [
-    "Electrical trade license or certificate",
-    "Issued by a recognized authority",
-    "Must be valid and not expired",
-  ],
-  Plumbing: [
-    "Licensed plumber certificate",
-    "Issued by a recognized authority or trade body",
-    "Must be valid and not expired",
-  ],
-};
 
 export function RequestCertificationScreen() {
   const route = useRoute<RouteProps>();
@@ -47,8 +35,9 @@ export function RequestCertificationScreen() {
   const [documentUri, setDocumentUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const requirements = CERT_REQUIREMENTS[category] ?? [];
-  const icon = CATEGORY_ICONS[category as ServiceCategory] ?? "📄";
+  const { data: categoryData } = useCategoryByName(category);
+  const requirements: string[] = categoryData?.cert_requirements ?? [];
+  const icon = categoryData?.icon ?? "📄";
 
   const handlePickDocument = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();

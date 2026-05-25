@@ -27,24 +27,12 @@ import { SwipeToConfirm } from "../../components/common/SwipeToConfirm";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import { useAuth } from "../../store/authStore";
+import { useCategoryByName } from "../../hooks/useCategories";
 import type { WorkerStackParamList } from "../../navigation/stacks/WorkerStack";
 
 type RouteProps = RouteProp<WorkerStackParamList, "WorkerJobDetail">;
 type Nav = NativeStackNavigationProp<WorkerStackParamList>;
 
-const CATEGORY_IMAGES: Record<string, string> = {
-  Cleaning: "https://images.unsplash.com/photo-1581578731548-c64695cc6954?q=80&w=800&auto=format&fit=crop",
-  Plumbing: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?q=80&w=800&auto=format&fit=crop",
-  Laundry: "https://images.unsplash.com/photo-1545173168-9f1947eebb0f?q=80&w=800&auto=format&fit=crop",
-  Painting: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?q=80&w=800&auto=format&fit=crop",
-  Repairing: "https://images.unsplash.com/photo-1581244276891-83393a899971?q=80&w=800&auto=format&fit=crop",
-  Electrician: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?q=80&w=800&auto=format&fit=crop",
-  Assembly: "https://images.unsplash.com/photo-1534073828943-f801091bb18c?q=80&w=800&auto=format&fit=crop",
-  Carpentry: "https://images.unsplash.com/photo-1533090161767-e6ffed986c88?q=80&w=800&auto=format&fit=crop",
-  Moving: "https://images.unsplash.com/photo-1584931423298-c576fda54bd2?q=80&w=800&auto=format&fit=crop",
-  Gardening: "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?q=80&w=800&auto=format&fit=crop",
-  General: "https://images.unsplash.com/photo-1484154218962-a197022b5858?q=80&w=800&auto=format&fit=crop",
-};
 
 function InfoRow({ icon, label, value }: { icon: string; label: string; value: string }) {
   return (
@@ -134,6 +122,8 @@ export function WorkerJobDetailScreen() {
     queryKey: ["task", taskId],
     queryFn: () => getTaskById(taskId),
   });
+
+  const { data: categoryData } = useCategoryByName(task?.category);
 
   const { data: customer } = useQuery({
     queryKey: ["user", task?.customer_id],
@@ -246,8 +236,8 @@ export function WorkerJobDetailScreen() {
     : [];
   const imageUri =
     toUrl(gigAttachments[0]) ||
-    CATEGORY_IMAGES[category] ||
-    CATEGORY_IMAGES.General;
+    categoryData?.image_url ||
+    null;
 
   const statusConfig = STATUS_STRIP_CONFIG[task.status] || STATUS_STRIP_CONFIG.pending;
 

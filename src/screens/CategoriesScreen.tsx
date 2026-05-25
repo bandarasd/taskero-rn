@@ -1,36 +1,37 @@
 import React from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { SERVICE_CATEGORIES, CATEGORY_ICONS, ServiceCategory } from "../types";
 import { colors } from "../theme/colors";
 import { radius, spacing } from "../theme/spacing";
+import { useCategories } from "../hooks/useCategories";
 import type { CustomerStackParamList } from "../navigation/stacks/CustomerStack";
 
 type Nav = NativeStackNavigationProp<CustomerStackParamList>;
 
 export function CategoriesScreen() {
   const navigation = useNavigation<Nav>();
-
-  const go = (category: ServiceCategory) => {
-    navigation.navigate("CategoryServices", { category });
-  };
+  const { data: categories = [], isLoading } = useCategories();
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.heading}>Categories</Text>
       <Text style={styles.sub}>Browse all service categories</Text>
-      <View style={styles.grid}>
-        {SERVICE_CATEGORIES.map((cat) => (
-          <Pressable key={cat} style={styles.card} onPress={() => go(cat)}>
-            <View style={styles.iconBg}>
-              <Text style={styles.icon}>{CATEGORY_ICONS[cat]}</Text>
-            </View>
-            <Text style={styles.label}>{cat}</Text>
-            <Text style={styles.arrow}>›</Text>
-          </Pressable>
-        ))}
-      </View>
+      {isLoading ? (
+        <ActivityIndicator color={colors.brandGreen} style={{ marginTop: 40 }} />
+      ) : (
+        <View style={styles.grid}>
+          {categories.map((cat) => (
+            <Pressable key={cat.name} style={styles.card} onPress={() => navigation.navigate("CategoryServices", { category: cat.name })}>
+              <View style={styles.iconBg}>
+                <Text style={styles.icon}>{cat.icon}</Text>
+              </View>
+              <Text style={styles.label}>{cat.name}</Text>
+              <Text style={styles.arrow}>›</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 }

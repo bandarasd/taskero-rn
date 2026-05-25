@@ -24,12 +24,8 @@ import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import { useAuth } from "../../store/authStore";
-import {
-  SERVICE_CATEGORIES,
-  CERTIFIED_CATEGORIES,
-  CATEGORY_ICONS,
-  ServiceCategory,
-} from "../../types";
+import { ServiceCategory } from "../../types";
+import { useCategories } from "../../hooks/useCategories";
 import { serviceAreaResult } from "../../utils/serviceAreaResult";
 import type { WorkerStackParamList } from "../../navigation/stacks/WorkerStack";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -118,6 +114,8 @@ export function AddEditServiceScreen() {
     }
   }, [existingGig]);
 
+  const { data: allCategories = [] } = useCategories();
+
   // Certification gate
   const { data: certifications = [] } = useQuery({
     queryKey: ["worker-certs", dbUserId],
@@ -128,8 +126,10 @@ export function AddEditServiceScreen() {
     .filter((c) => c.status === "approved")
     .map((c) => c.category);
 
-  const isCategoryLocked = (cat: ServiceCategory) =>
-    CERTIFIED_CATEGORIES.includes(cat) && !approvedCategories.includes(cat);
+  const isCategoryLocked = (cat: ServiceCategory) => {
+    const catData = allCategories.find((c) => c.name === cat);
+    return (catData?.requires_certification ?? false) && !approvedCategories.includes(cat);
+  };
 
   const handleCategorySelect = (cat: ServiceCategory) => {
     if (isCategoryLocked(cat)) {
@@ -329,7 +329,7 @@ export function AddEditServiceScreen() {
         <RequiredLabel text="Category" />
         <Pressable style={styles.dropdownBtn} onPress={() => setCategoryModalVisible(true)}>
           <Text style={styles.dropdownValue}>
-            {CATEGORY_ICONS[category]} {category}
+            {allCategories.find((c) => c.name === category)?.icon ?? "✨"} {category}
           </Text>
           <Ionicons name="chevron-down" size={18} color={colors.subtext} />
         </Pressable>
@@ -390,7 +390,8 @@ export function AddEditServiceScreen() {
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Select Category</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
-              {SERVICE_CATEGORIES.map((cat) => {
+              {allCategories.map((catData) => {
+                const cat = catData.name;
                 const locked = isCategoryLocked(cat);
                 const selected = category === cat;
                 return (
@@ -404,7 +405,7 @@ export function AddEditServiceScreen() {
                     onPress={() => handleCategorySelect(cat)}
                     activeOpacity={locked ? 0.5 : 0.7}
                   >
-                    <Text style={styles.catRowIcon}>{CATEGORY_ICONS[cat]}</Text>
+                    <Text style={styles.catRowIcon}>{catData.icon}</Text>
                     <Text
                       style={[
                         styles.catRowLabel,

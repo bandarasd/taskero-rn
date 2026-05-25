@@ -40,7 +40,7 @@ export type BookingFlowParamList = {
     notes?: string;
     imageUris?: string[];
   };
-  PaymentSuccess: { taskId: string };
+  PaymentSuccess: { taskId: string; scheduledAt: string; address: string };
 };
 
 const Stack = createNativeStackNavigator<BookingFlowParamList>();

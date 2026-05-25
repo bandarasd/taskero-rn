@@ -67,6 +67,7 @@ export function WorkerActiveJobScreen() {
   const [runningLateReported, setRunningLateReported] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasSeededElapsed = useRef(false);
+  const hasSeededLateReported = useRef(false);
   const overtimeAlertShown = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const ringAnim = useRef(new Animated.Value(0)).current;
@@ -106,6 +107,16 @@ export function WorkerActiveJobScreen() {
       hasSeededElapsed.current = true;
     }
   }, [task?.started_at]);
+
+  useEffect(() => {
+    if (task && !hasSeededLateReported.current) {
+      hasSeededLateReported.current = true;
+      if (task.overrun_notified_at) {
+        setRunningLateReported(true);
+        overtimeAlertShown.current = true;
+      }
+    }
+  }, [task]);
 
   useEffect(() => {
     // Recalculate from started_at on foreground resume so backgrounded time is included

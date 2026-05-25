@@ -33,12 +33,9 @@ function isoDateString(date: Date) {
 
 function formatSlot(slot: string) {
   const [h, m] = slot.split(":").map(Number);
-  const d = new Date();
-  d.setUTCHours(h, m, 0, 0);
-  const localH = d.getHours();
-  const period = localH >= 12 ? "PM" : "AM";
-  const hour = localH % 12 || 12;
-  return `${hour}:${d.getMinutes().toString().padStart(2, "0")} ${period}`;
+  const period = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 || 12;
+  return `${hour}:${m.toString().padStart(2, "0")} ${period}`;
 }
 
 function isAM(slot: string) {
@@ -76,7 +73,7 @@ export function DateTimeSelectionScreen() {
   const buildScheduledAt = () => {
     if (!selectedDate || !selectedSlot) return "";
     const dateStr = format(selectedDate, "yyyy-MM-dd");
-    return `${dateStr}T${selectedSlot}:00.000Z`;
+    return `${dateStr}T${selectedSlot}:00`;
   };
 
   return (

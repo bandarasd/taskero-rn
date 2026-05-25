@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -104,6 +104,14 @@ export function CustomerDelayResponseScreen() {
 
   const alreadyResponded = !!task.delay_response;
 
+  useEffect(() => {
+    if (alreadyResponded) {
+      navigation.replace("AppointmentDetail" as never, { taskId } as never);
+    }
+  }, [alreadyResponded]);
+
+  if (alreadyResponded) return null;
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <LinearGradient colors={["#F59E0B", "#D97706"]} style={styles.header}>
@@ -148,16 +156,7 @@ export function CustomerDelayResponseScreen() {
         {/* Action prompt */}
         <Text style={styles.prompt}>What would you like to do?</Text>
 
-        {alreadyResponded ? (
-          <View style={styles.respondedBanner}>
-            <Ionicons name="checkmark-circle-outline" size={18} color={colors.brandGreen} />
-            <Text style={styles.respondedText}>
-              You already responded:{" "}
-              <Text style={{ fontWeight: "700" }}>{task.delay_response}</Text>
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.actions}>
+        <View style={styles.actions}>
             <ActionButton
               icon="time-outline"
               label="Wait for Tasker"
@@ -175,7 +174,6 @@ export function CustomerDelayResponseScreen() {
               onPress={() => handleAction('cancel')}
             />
           </View>
-        )}
       </View>
     </View>
   );

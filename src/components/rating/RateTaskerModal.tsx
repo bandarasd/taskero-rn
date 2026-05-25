@@ -17,15 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar } from "../common/Avatar";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
-
-const QUICK_TAGS = [
-  "Punctual",
-  "Clean work",
-  "Friendly",
-  "Professional",
-  "Good value",
-  "Communicated well",
-];
+import { useReviewTags } from "../../hooks/useReviewTags";
 
 const RATING_LABELS: Record<number, string> = {
   1: "😞  Terrible",
@@ -45,6 +37,8 @@ interface Props {
 
 export function RateTaskerModal({ visible, onClose, onSubmit, taskerName, taskerAvatar }: Props) {
   const insets = useSafeAreaInsets();
+  const { data: reviewTagItems = [] } = useReviewTags();
+  const quickTags = reviewTagItems.map((t) => t.title);
   const [step, setStep] = useState<"stars" | "details">("stars");
   const [rating, setRating] = useState(0);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -172,7 +166,7 @@ export function RateTaskerModal({ visible, onClose, onSubmit, taskerName, tasker
               {/* Quick tags */}
               <Text style={styles.sectionLabel}>What went well?</Text>
               <View style={styles.tagsWrap}>
-                {QUICK_TAGS.map((tag) => {
+                {quickTags.map((tag) => {
                   const selected = selectedTags.includes(tag);
                   return (
                     <TouchableOpacity

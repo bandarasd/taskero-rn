@@ -52,7 +52,7 @@ export function PaymentScreen() {
         status: "pending",
         payment_method: selectedMethod,
       } as any, imageUris);
-      navigation.navigate("PaymentSuccess", { taskId: task.id });
+      navigation.navigate("PaymentSuccess", { taskId: task.id, scheduledAt, address });
     } catch {
       toastRef.current?.show("Could not place booking. Please try again.", "error");
     } finally {

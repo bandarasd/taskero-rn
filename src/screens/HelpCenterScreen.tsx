@@ -1,20 +1,13 @@
 import React, { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View, StatusBar } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, StatusBar } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import { radius, spacing } from "../theme/spacing";
-
-const FAQS = [
-  { q: "How do I book a service?", a: "Browse or search for a service, tap on it, then follow the booking steps. You'll pick a location, date, and time." },
-  { q: "How does pricing work?", a: "Prices start at the worker's base rate. After the job is assessed, the worker may send a formal quote. You can accept or decline." },
-  { q: "Can I cancel a booking?", a: "Yes. Go to Bookings, select the booking, and use the cancel option. Cancellation policies depend on how close to the job time you cancel." },
-  { q: "How do I pay?", a: "Payments are processed securely through the app. The amount is charged once you accept a worker's quote." },
-  { q: "How do I become a worker?", a: "Sign up, choose 'Find Work' during account creation, set up your profile and services, and start receiving job requests." },
-  { q: "What if I'm not satisfied?", a: "Contact the worker via chat first. If unresolved, use the Help Center to report the issue to our support team." },
-];
+import { useFaqs } from "../hooks/useFaqs";
 
 export function HelpCenterScreen() {
   const [openIdx, setOpenIdx] = useState<number | null>(null);
+  const { data: faqs = [], isLoading } = useFaqs();
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -28,14 +21,16 @@ export function HelpCenterScreen() {
       </View>
 
       <Text style={styles.sectionTitle}>FREQUENTLY ASKED QUESTIONS</Text>
-      {FAQS.map((faq, idx) => (
+      {isLoading ? (
+        <ActivityIndicator color={colors.brandGreen} style={{ marginVertical: 24 }} />
+      ) : faqs.map((faq, idx) => (
         <Pressable
-          key={idx}
+          key={faq.id}
           style={[styles.card, openIdx === idx && styles.cardOpen]}
           onPress={() => setOpenIdx(openIdx === idx ? null : idx)}
         >
           <View style={styles.row}>
-            <Text style={[styles.question, openIdx === idx && styles.questionOpen]}>{faq.q}</Text>
+            <Text style={[styles.question, openIdx === idx && styles.questionOpen]}>{faq.title}</Text>
             <Ionicons
               name={openIdx === idx ? "chevron-up" : "chevron-down"}
               size={18}
@@ -44,7 +39,7 @@ export function HelpCenterScreen() {
           </View>
           {openIdx === idx && (
             <View style={styles.answerContainer}>
-              <Text style={styles.answer}>{faq.a}</Text>
+              <Text style={styles.answer}>{faq.body.answer}</Text>
             </View>
           )}
         </Pressable>

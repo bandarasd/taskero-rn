@@ -21,8 +21,8 @@ import { StickyPriceCTA } from "../../components/booking/StickyPriceCTA";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import type { BookingFlowParamList } from "./BookingFlowNavigator";
-import { ServiceCategory } from "../../types";
 import { Ionicons } from "@expo/vector-icons";
+import { useCategoryByName } from "../../hooks/useCategories";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 
@@ -38,45 +38,6 @@ type Field = {
   options?: string[];
 };
 
-const CATEGORY_FIELDS: Record<ServiceCategory | string, Field[]> = {
-  Cleaning: [
-    { key: "home_size", label: "Home size", placeholder: "e.g. 1200", type: "options-chips", options: ["Small", "Medium", "Large"] },
-    { key: "bedrooms", label: "Bedrooms", placeholder: "e.g. 3", type: "number-chips" },
-    { key: "bathrooms", label: "Bathrooms", placeholder: "e.g. 2", type: "number-chips" },
-    { key: "cleaning_type", label: "Cleaning type", placeholder: "e.g. Deep clean", type: "options-chips", options: ["Regular", "Deep clean"] },
-  ],
-  Plumbing: [
-    { key: "issue_type", label: "Issue type", placeholder: "e.g. Leaking pipe", type: "text" },
-    { key: "urgency", label: "Urgency", placeholder: "e.g. Urgent", type: "options-chips", options: ["Urgent", "Standard"] },
-  ],
-  Laundry: [
-    { key: "loads", label: "Number of loads", placeholder: "e.g. 3", type: "number-chips" },
-    { key: "service_type", label: "Service type", placeholder: "e.g. Wash & fold", type: "options-chips", options: ["Wash & fold", "Dry clean", "Ironing"] },
-  ],
-  Painting: [
-    { key: "room_count", label: "Number of rooms", placeholder: "e.g. 2", type: "number-chips" },
-    { key: "paint_supplied", label: "Paint supplied by", placeholder: "e.g. Me", type: "options-chips", options: ["Me", "Worker"] },
-  ],
-  Electrician: [
-    { key: "issue", label: "Issue description", placeholder: "e.g. Outlet not working", type: "text" },
-    { key: "fixture_count", label: "Number of fixtures", placeholder: "e.g. 4", type: "number-chips" },
-  ],
-  Moving: [
-    { key: "property_size", label: "Property size", placeholder: "e.g. 2-bedroom", type: "options-chips", options: ["Studio", "1 Bedroom", "2 Bedrooms", "3+ Bedrooms"] },
-    { key: "floor", label: "Floor (from)", placeholder: "e.g. 3", type: "number-chips" },
-    { key: "has_elevator", label: "Elevator available", placeholder: "", type: "options-chips", options: ["Yes", "No"] },
-    { key: "packing_needed", label: "Packing needed", placeholder: "", type: "options-chips", options: ["Yes", "No"] },
-  ],
-  General: [
-    { key: "description", label: "Job description", placeholder: "Describe what you need done", type: "text" },
-  ],
-};
-
-const CATEGORY_ICONS: Record<string, string> = {
-  Cleaning: "🧹", Plumbing: "🔧", Laundry: "👔", Painting: "🎨",
-  Electrician: "⚡", Carpentry: "🪚", Assembly: "🔩", Gardening: "🌿",
-  Moving: "📦", Repairing: "🛠️", General: "📋",
-};
 
 const MAX_NOTES = 300;
 const MAX_IMAGES = 4;
@@ -95,8 +56,9 @@ export function ServiceSpecificBookingScreen() {
     queryFn: () => getGigById(gigId),
   });
 
-  const fields = CATEGORY_FIELDS[category] ?? CATEGORY_FIELDS.General;
-  const icon = CATEGORY_ICONS[category] ?? "📋";
+  const { data: categoryData } = useCategoryByName(category);
+  const fields: Field[] = (categoryData?.booking_fields as Field[]) ?? [];
+  const icon = categoryData?.icon ?? "📋";
 
   const setValue = (key: string, val: string) => setValues((prev) => ({ ...prev, [key]: val }));
 

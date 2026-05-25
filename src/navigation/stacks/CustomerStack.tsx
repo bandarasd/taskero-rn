@@ -23,6 +23,7 @@ import { PrivacyPolicyScreen } from "../../screens/PrivacyPolicyScreen";
 import { SecuritySettingsScreen } from "../../screens/SecuritySettingsScreen";
 import { BookingFlowNavigator } from "../../screens/BookingFlow/BookingFlowNavigator";
 import { CustomerDelayResponseScreen } from "../../screens/CustomerDelayResponseScreen";
+import { TaskerProfileScreen } from "../../screens/TaskerProfileScreen";
 
 export type CustomerStackParamList = {
   // Tab roots
@@ -58,6 +59,9 @@ export type CustomerStackParamList = {
 
   // Delay response
   CustomerDelayResponse: { taskId: string };
+
+  // Tasker public profile
+  TaskerProfile: { taskerId: string; taskerName?: string };
 };
 
 const Stack = createNativeStackNavigator<CustomerStackParamList>();
@@ -85,6 +89,7 @@ export function CustomerStack() {
       <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: "Privacy Policy" }} />
       <Stack.Screen name="BookingFlow" component={BookingFlowNavigator} options={{ headerShown: false }} />
       <Stack.Screen name="CustomerDelayResponse" component={CustomerDelayResponseScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="TaskerProfile" component={TaskerProfileScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

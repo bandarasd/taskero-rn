@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View, Pressable } from "react-native";
 import { useNavigation, useRoute, RouteProp, CommonActions } from "@react-navigation/native";
+import { format } from "date-fns";
 import { Button } from "../../components/common/Button";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
@@ -13,7 +14,10 @@ type RouteProps = RouteProp<BookingFlowParamList, "PaymentSuccess">;
 export function PaymentSuccessScreen() {
   const route = useRoute<RouteProps>();
   const navigation = useNavigation();
-  const bookingRef = route.params.taskId.slice(0, 8).toUpperCase();
+  const { taskId, scheduledAt, address } = route.params;
+  const bookingRef = taskId.slice(0, 8).toUpperCase();
+  const formattedDate = format(new Date(scheduledAt), "EEE, d MMM");
+  const formattedTime = format(new Date(scheduledAt), "h:mm a");
 
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -82,15 +86,15 @@ export function PaymentSuccessScreen() {
           <View style={styles.receiptBody}>
             <View style={styles.receiptRow}>
               <Ionicons name="calendar-outline" size={18} color={colors.subtext} />
-              <Text style={styles.receiptValue}>Scheduled for Wed, 17 May</Text>
+              <Text style={styles.receiptValue}>Scheduled for {formattedDate}</Text>
             </View>
             <View style={[styles.receiptRow, { marginTop: spacing.sm }]}>
               <Ionicons name="location-outline" size={18} color={colors.subtext} />
-              <Text style={styles.receiptValue} numberOfLines={1}>123 Galle Road, Colombo</Text>
+              <Text style={styles.receiptValue} numberOfLines={1}>{address}</Text>
             </View>
             <View style={[styles.receiptRow, { marginTop: spacing.sm }]}>
               <Ionicons name="time-outline" size={18} color={colors.subtext} />
-              <Text style={styles.receiptValue}>2:00 PM</Text>
+              <Text style={styles.receiptValue}>{formattedTime}</Text>
             </View>
           </View>
         </Animated.View>

@@ -9,7 +9,7 @@ import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { EmptyState } from "../components/common/EmptyState";
 import { colors } from "../theme/colors";
 import { spacing } from "../theme/spacing";
-import { CATEGORY_ICONS, ServiceCategory } from "../types";
+import { useCategoryByName } from "../hooks/useCategories";
 import type { CustomerStackParamList } from "../navigation/stacks/CustomerStack";
 
 type RouteProps = RouteProp<CustomerStackParamList, "CategoryServices">;
@@ -21,9 +21,10 @@ export function CategoryServicesScreen() {
   const qc = useQueryClient();
   const { category } = route.params;
 
+  const { data: categoryData } = useCategoryByName(category);
   const { data, isLoading, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ["gigs", "category", category],
-    queryFn: ({ pageParam = 1 }) => getGigsByCategory(category as ServiceCategory, pageParam, 15),
+    queryFn: ({ pageParam = 1 }) => getGigsByCategory(category, pageParam, 15),
     getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.page + 1 : undefined,
     initialPageParam: 1,
   });
@@ -33,7 +34,7 @@ export function CategoryServicesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.icon}>{CATEGORY_ICONS[category as ServiceCategory] ?? "🛠️"}</Text>
+        <Text style={styles.icon}>{categoryData?.icon ?? "🛠️"}</Text>
         <Text style={styles.title}>{category}</Text>
         <Text style={styles.count}>{gigs.length} services</Text>
       </View>

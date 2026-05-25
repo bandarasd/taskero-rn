@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -49,6 +49,8 @@ export function HomeScreen() {
   const [search, setSearch] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<Gig[]>([]);
+  const [searchError, setSearchError] = useState(false);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [locationAddress, setLocationAddress] = useState("");
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -102,22 +104,31 @@ export function HomeScreen() {
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-  const handleSearch = useCallback(async (text: string) => {
+  useEffect(() => () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); }, []);
+
+  const handleSearch = useCallback((text: string) => {
     setSearch(text);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
     if (text.trim().length < 2) {
       setSearchResults([]);
+      setSearchError(false);
       setSearching(false);
       return;
     }
     setSearching(true);
-    try {
-      const res = await searchGigs(text.trim());
-      setSearchResults(res.data);
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setSearching(false);
-    }
+    setSearchError(false);
+    searchTimeout.current = setTimeout(async () => {
+      try {
+        const res = await searchGigs(text.trim());
+        setSearchResults(res.data);
+      } catch (err) {
+        console.error("Search failed:", err);
+        setSearchResults([]);
+        setSearchError(true);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
   }, []);
 
   const navigateToGig = async (gig: Gig) => {
@@ -222,6 +233,8 @@ export function HomeScreen() {
             title="Search Results"
             gigs={searchResults}
             loading={searching}
+            error={searchError}
+            vertical
             onGigPress={navigateToGig}
           />
         ) : (

@@ -12,42 +12,21 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { spacing } from "../../theme/spacing";
+import { usePromos } from "../../hooks/usePromos";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const BANNER_WIDTH = SCREEN_WIDTH - spacing.lg * 2;
 
-const PROMOS = [
-  {
-    id: "1",
-    title: "Summer Special",
-    subtitle: "Get 20% off your first house cleaning booking",
-    color: "#16A34A",
-    icon: "sparkles",
-  },
-  {
-    id: "2",
-    title: "Top Rated Experts",
-    subtitle: "Highly rated plumbers and electricians near you",
-    color: "#1D4ED8",
-    icon: "construct",
-  },
-  {
-    id: "3",
-    title: "Quick Fixes",
-    subtitle: "Handyman services starting from just Rs. 49",
-    color: "#EA580C",
-    icon: "hammer",
-  },
-];
-
 export function HeroBanner() {
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
+  const { data: promos = [] } = usePromos();
 
   useEffect(() => {
+    if (!promos.length) return;
     const timer = setInterval(() => {
       let nextIndex = activeIndex + 1;
-      if (nextIndex >= PROMOS.length) nextIndex = 0;
+      if (nextIndex >= promos.length) nextIndex = 0;
       
       flatListRef.current?.scrollToIndex({
         index: nextIndex,
@@ -57,7 +36,7 @@ export function HeroBanner() {
     }, 4000);
 
     return () => clearInterval(timer);
-  }, [activeIndex]);
+  }, [activeIndex, promos.length]);
 
   const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const scrollOffset = event.nativeEvent.contentOffset.x;
@@ -67,11 +46,13 @@ export function HeroBanner() {
     }
   };
 
+  if (!promos.length) return null;
+
   return (
     <View style={styles.container}>
       <FlatList
         ref={flatListRef}
-        data={PROMOS}
+        data={promos}
         keyExtractor={(item) => item.id}
         horizontal
         pagingEnabled
@@ -82,23 +63,23 @@ export function HeroBanner() {
         decelerationRate="fast"
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => (
-          <View style={[styles.promoCard, { backgroundColor: item.color }]}>
+          <View style={[styles.promoCard, { backgroundColor: item.body.color }]}>
             <View style={styles.textContainer}>
               <Text style={styles.title}>{item.title}</Text>
-              <Text style={styles.subtitle}>{item.subtitle}</Text>
+              <Text style={styles.subtitle}>{item.body.subtitle}</Text>
               <Pressable style={styles.ctaBtn}>
                 <Text style={styles.ctaText}>Book Now</Text>
                 <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
               </Pressable>
             </View>
             <View style={styles.iconContainer}>
-              <Ionicons name={item.icon as any} size={60} color="rgba(255,255,255,0.2)" />
+              <Ionicons name={item.body.icon as any} size={60} color="rgba(255,255,255,0.2)" />
             </View>
           </View>
         )}
       />
       <View style={styles.pagination}>
-        {PROMOS.map((_, i) => (
+        {promos.map((_, i) => (
           <View
             key={i}
             style={[

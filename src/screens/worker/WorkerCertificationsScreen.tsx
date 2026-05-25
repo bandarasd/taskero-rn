@@ -16,7 +16,7 @@ import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import { useAuth } from "../../store/authStore";
-import { CERTIFIED_CATEGORIES, CATEGORY_ICONS, ServiceCategory } from "../../types";
+import { useCategories } from "../../hooks/useCategories";
 import type { WorkerStackParamList } from "../../navigation/stacks/WorkerStack";
 
 type Nav = NativeStackNavigationProp<WorkerStackParamList>;
@@ -39,23 +39,13 @@ function StatusBadge({ status }: { status: Status }) {
   );
 }
 
-const CERT_DESCRIPTIONS: Record<ServiceCategory, string> = {
-  Electrician: "Requires a valid electrical trade license or equivalent qualification.",
-  Plumbing: "Requires a licensed plumber certification or trade qualification.",
-  Cleaning: "",
-  Laundry: "",
-  Painting: "",
-  Repairing: "",
-  Assembly: "",
-  Carpentry: "",
-  Moving: "",
-  Gardening: "",
-  General: "",
-};
 
 export function WorkerCertificationsScreen() {
   const { dbUserId } = useAuth();
   const navigation = useNavigation<Nav>();
+
+  const { data: allCategories = [] } = useCategories();
+  const certifiedCategories = allCategories.filter((c) => c.requires_certification);
 
   const { data: certifications = [], isLoading, refetch } = useQuery({
     queryKey: ["worker-certs", dbUserId],
@@ -75,7 +65,8 @@ export function WorkerCertificationsScreen() {
         Some service categories require proof of professional certification before you can post gigs in them. Submit your documents below for admin review.
       </Text>
 
-      {CERTIFIED_CATEGORIES.map((cat) => {
+      {certifiedCategories.map((catData) => {
+        const cat = catData.name;
         const cert = certMap[cat] as WorkerCertification | undefined;
         const status: Status = cert ? cert.status : "not_submitted";
         const canApply = status === "not_submitted" || status === "rejected";
@@ -83,10 +74,10 @@ export function WorkerCertificationsScreen() {
         return (
           <View key={cat} style={styles.card}>
             <View style={styles.cardHeader}>
-              <Text style={styles.catIcon}>{CATEGORY_ICONS[cat]}</Text>
+              <Text style={styles.catIcon}>{catData.icon}</Text>
               <View style={styles.cardTitleCol}>
                 <Text style={styles.catName}>{cat}</Text>
-                <Text style={styles.catDesc}>{CERT_DESCRIPTIONS[cat]}</Text>
+                <Text style={styles.catDesc}>{catData.cert_description}</Text>
               </View>
             </View>
 

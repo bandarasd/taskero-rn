@@ -29,6 +29,7 @@ import { colors } from "../../theme/colors";
 import { useUnreadMessageCount } from "../../hooks/useUnreadMessageCount";
 import { useUnreadBookingNotificationCount } from "../../hooks/useUnreadBookingNotificationCount";
 import { CustomerDelayResponseScreen } from "../../screens/CustomerDelayResponseScreen";
+import { TaskerProfileScreen } from "../../screens/TaskerProfileScreen";
 
 // ─── Shared stack screens (used across multiple tabs) ─────────────────────────
 
@@ -49,6 +50,7 @@ const sharedScreens = (Stack: ReturnType<typeof createNativeStackNavigator<Custo
     <Stack.Screen name="ClientPaymentMethods" component={ClientPaymentMethodsScreen} options={{ title: "Payment Methods" }} />
     <Stack.Screen name="MyReviews" component={MyReviewsScreen} options={{ title: "My Reviews" }} />
     <Stack.Screen name="CustomerDelayResponse" component={CustomerDelayResponseScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="TaskerProfile" component={TaskerProfileScreen} options={{ headerShown: false }} />
   </>
 );
 

@@ -154,34 +154,36 @@ export function ServiceDetailScreen() {
           </View>
 
           {/* Worker strip */}
-          <View style={styles.workerStrip}>
+          <Pressable
+            style={styles.workerStrip}
+            onPress={() =>
+              navigation.navigate("TaskerProfile", {
+                taskerId: gig.tasker_id,
+                taskerName: workerName,
+              })
+            }
+          >
             <Avatar uri={gig.tasker?.avatar_url} name={workerName} size={44} />
             <View style={{ marginLeft: 12, flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <View>
-                  <Text style={styles.workerName}>{workerName}</Text>
-                  <View style={styles.workerRatingRow}>
-                    <Ionicons name="star" size={12} color={colors.warning} />
-                    <Text style={styles.workerRatingText}>
-                      {gig.tasker?.rating?.toFixed(1) ?? "—"} ({gig.tasker?.review_count ?? 0})
+              <Text style={styles.workerName}>{workerName}</Text>
+              <View style={styles.workerRatingRow}>
+                <Ionicons name="star" size={12} color={colors.warning} />
+                <Text style={styles.workerRatingText}>
+                  {gig.tasker?.rating?.toFixed(1) ?? "—"} ({gig.tasker?.review_count ?? 0})
+                </Text>
+                {gig.tasker?.completion_rate != null && (
+                  <>
+                    <Text style={[styles.workerRatingText, { color: colors.borderLight }]}>  ·  </Text>
+                    <Ionicons name="checkmark-circle-outline" size={12} color={colors.brandGreen} />
+                    <Text style={[styles.workerRatingText, { color: colors.brandGreen }]}>
+                      {gig.tasker.completion_rate}% completion
                     </Text>
-                    {gig.tasker?.completion_rate != null && (
-                      <>
-                        <Text style={[styles.workerRatingText, { color: colors.borderLight }]}>  ·  </Text>
-                        <Ionicons name="checkmark-circle-outline" size={12} color={colors.brandGreen} />
-                        <Text style={[styles.workerRatingText, { color: colors.brandGreen }]}>
-                          {gig.tasker.completion_rate}% completion
-                        </Text>
-                      </>
-                    )}
-                  </View>
-                </View>
-                <Pressable style={styles.viewProfileBtn}>
-                   <Ionicons name="chevron-forward" size={20} color={colors.subtext} />
-                </Pressable>
+                  </>
+                )}
               </View>
             </View>
-          </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.subtext} />
+          </Pressable>
 
           {/* About section */}
           {gig.description ? (

@@ -2,6 +2,7 @@ import React from "react";
 import { FlatList, StyleSheet, View, ActivityIndicator } from "react-native";
 import { Gig } from "../../types";
 import { GigCard } from "../gigs/GigCard";
+import { GigListItem } from "../gigs/GigListItem";
 import { SectionHeader } from "./SectionHeader";
 import { spacing } from "../../theme/spacing";
 import { EmptyState } from "../common/EmptyState";
@@ -11,6 +12,8 @@ interface ServiceSectionProps {
   gigs: Gig[];
   onSeeAll?: () => void;
   loading?: boolean;
+  error?: boolean;
+  vertical?: boolean;
   onGigPress: (gig: Gig) => void;
   emptyIcon?: string;
 }
@@ -20,6 +23,8 @@ export function ServiceSection({
   gigs,
   onSeeAll,
   loading,
+  error,
+  vertical,
   onGigPress,
   emptyIcon = "🛠️",
 }: ServiceSectionProps) {
@@ -34,12 +39,36 @@ export function ServiceSection({
     );
   }
 
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <SectionHeader title={title} />
+        <View style={styles.emptyContainer}>
+          <EmptyState icon="⚠️" title="Search failed. Please try again." style={{ height: 120 }} />
+        </View>
+      </View>
+    );
+  }
+
   if (gigs.length === 0) {
     return (
       <View style={styles.container}>
         <SectionHeader title={title} />
         <View style={styles.emptyContainer}>
           <EmptyState icon={emptyIcon} title="No services found" style={{ height: 120 }} />
+        </View>
+      </View>
+    );
+  }
+
+  if (vertical) {
+    return (
+      <View style={styles.container}>
+        <SectionHeader title={title} onSeeAll={onSeeAll} />
+        <View style={styles.verticalList}>
+          {gigs.map((item) => (
+            <GigListItem key={item.id} gig={item} onPress={() => onGigPress(item)} />
+          ))}
         </View>
       </View>
     );
@@ -78,5 +107,8 @@ const styles = StyleSheet.create({
     paddingLeft: spacing.lg,
     paddingRight: spacing.lg,
     paddingBottom: 8,
+  },
+  verticalList: {
+    paddingHorizontal: spacing.lg,
   },
 });

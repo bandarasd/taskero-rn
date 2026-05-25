@@ -1,27 +1,14 @@
 import React from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { APITask, ServiceCategory } from "../../types";
+import { APITask } from "../../types";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import { TaskStatusBadge } from "../common/Badge";
 import { Avatar } from "../common/Avatar";
+import { useCategoryByName } from "../../hooks/useCategories";
 
 type Props = { task: APITask; onPress: () => void };
-
-const CATEGORY_IMAGES: Record<string, string> = {
-  Cleaning: "https://images.unsplash.com/photo-1581578731548-c64695cc6954?q=80&w=800&auto=format&fit=crop",
-  Plumbing: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?q=80&w=800&auto=format&fit=crop",
-  Laundry: "https://images.unsplash.com/photo-1545173168-9f1947eebb0f?q=80&w=800&auto=format&fit=crop",
-  Painting: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?q=80&w=800&auto=format&fit=crop",
-  Repairing: "https://images.unsplash.com/photo-1581244276891-83393a899971?q=80&w=800&auto=format&fit=crop",
-  Electrician: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?q=80&w=800&auto=format&fit=crop",
-  Assembly: "https://images.unsplash.com/photo-1534073828943-f801091bb18c?q=80&w=800&auto=format&fit=crop",
-  Carpentry: "https://images.unsplash.com/photo-1533090161767-e6ffed986c88?q=80&w=800&auto=format&fit=crop",
-  Moving: "https://images.unsplash.com/photo-1584931423298-c576fda54bd2?q=80&w=800&auto=format&fit=crop",
-  Gardening: "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?q=80&w=800&auto=format&fit=crop",
-  General: "https://images.unsplash.com/photo-1484154218962-a197022b5858?q=80&w=800&auto=format&fit=crop",
-};
 
 function fmtDate(iso?: string | null) {
   if (!iso) return "No date set";
@@ -40,8 +27,9 @@ export function WorkerJobCard({ task, onPress }: Props) {
 
   const isPending = task.status === "pending";
   const category = (task.category || task.gig?.category || "General") as string;
+  const { data: categoryData } = useCategoryByName(category);
   const toUrl = (a: unknown) => typeof a === "string" ? a : (a as { url?: string })?.url ?? null;
-  const imageUri = toUrl(task.gig_attachments?.[0]) || toUrl(task.attachments?.[0]) || CATEGORY_IMAGES[category] || CATEGORY_IMAGES.General;
+  const imageUri = toUrl(task.gig_attachments?.[0]) || toUrl(task.attachments?.[0]) || categoryData?.image_url || null;
 
   const price = task.quoted_price != null
     ? `Rs. ${task.quoted_price}`

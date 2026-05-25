@@ -25,49 +25,7 @@ export type ApiUser = {
 
 // ─── Categories ──────────────────────────────────────────────────────────────
 
-export type ServiceCategory =
-  | "Cleaning"
-  | "Plumbing"
-  | "Laundry"
-  | "Painting"
-  | "Repairing"
-  | "Electrician"
-  | "Assembly"
-  | "Carpentry"
-  | "Moving"
-  | "Gardening"
-  | "General";
-
-// Categories that require admin-approved certification before a worker can post gigs
-export const CERTIFIED_CATEGORIES: ServiceCategory[] = ["Electrician", "Plumbing"];
-
-export const SERVICE_CATEGORIES: ServiceCategory[] = [
-  "Cleaning",
-  "Plumbing",
-  "Laundry",
-  "Painting",
-  "Repairing",
-  "Electrician",
-  "Assembly",
-  "Carpentry",
-  "Moving",
-  "Gardening",
-  "General",
-];
-
-export const CATEGORY_ICONS: Record<ServiceCategory, string> = {
-  Cleaning: "🧹",
-  Plumbing: "🔧",
-  Laundry: "👕",
-  Painting: "🎨",
-  Repairing: "🛠️",
-  Electrician: "⚡",
-  Assembly: "🔩",
-  Carpentry: "🪵",
-  Moving: "📦",
-  Gardening: "🌱",
-  General: "✨",
-};
+export type ServiceCategory = string;
 
 // ─── Gig ─────────────────────────────────────────────────────────────────────
 

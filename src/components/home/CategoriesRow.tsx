@@ -1,8 +1,8 @@
 import React from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { ServiceCategory } from "../../types";
 import { spacing } from "../../theme/spacing";
+import { useCategories } from "../../hooks/useCategories";
 
 const CATEGORY_CONFIG: Record<string, { label: string; icon: keyof typeof Ionicons.glyphMap; iconColor: string; bg: string }> = {
   Carpentry:    { label: "Carpentry",    icon: "hammer",          iconColor: "#16A34A", bg: "#DCFCE7" },
@@ -18,32 +18,35 @@ const CATEGORY_CONFIG: Record<string, { label: string; icon: keyof typeof Ionico
   General:      { label: "General",      icon: "grid",            iconColor: "#16A34A", bg: "#DCFCE7" },
 };
 
-const CATEGORIES: ServiceCategory[] = [
-  "Carpentry", "Cleaning", "Painting", "Electrician",
-  "Moving", "Repairing", "Plumbing", "Gardening",
-];
-
 interface CategoriesRowProps {
-  onCategoryPress: (category: ServiceCategory) => void;
+  onCategoryPress: (category: string) => void;
 }
 
 export function CategoriesRow({ onCategoryPress }: CategoriesRowProps) {
+  const { data: allCategories = [] } = useCategories();
+  // Show all categories; fall back to CATEGORY_CONFIG icon if available, else default
+  const featuredCategories = allCategories.slice(0, 8);
+
   return (
     <View style={styles.container}>
       <FlatList
-        data={CATEGORIES}
-        keyExtractor={(item) => item}
+        data={featuredCategories}
+        keyExtractor={(item) => item.name}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => {
-          const cfg = CATEGORY_CONFIG[item];
+          const cfg = CATEGORY_CONFIG[item.name];
           return (
-            <Pressable style={styles.categoryItem} onPress={() => onCategoryPress(item)}>
-              <View style={[styles.iconBg, { backgroundColor: cfg.bg }]}>
-                <Ionicons name={cfg.icon} size={24} color={cfg.iconColor} />
+            <Pressable style={styles.categoryItem} onPress={() => onCategoryPress(item.name)}>
+              <View style={[styles.iconBg, { backgroundColor: cfg?.bg ?? "#DCFCE7" }]}>
+                {cfg ? (
+                  <Ionicons name={cfg.icon} size={24} color={cfg.iconColor} />
+                ) : (
+                  <Text style={{ fontSize: 22 }}>{item.icon}</Text>
+                )}
               </View>
-              <Text style={styles.label}>{cfg.label}</Text>
+              <Text style={styles.label}>{item.name}</Text>
             </Pressable>
           );
         }}
