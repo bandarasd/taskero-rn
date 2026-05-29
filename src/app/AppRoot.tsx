@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { NavigationContainer } from "@react-navigation/native";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StripeProvider } from "@stripe/stripe-react-native";
@@ -8,8 +8,7 @@ import { AuthProvider } from "../store/authStore";
 import { RootNavigator } from "../navigation/RootNavigator";
 import { LoadingScreen } from "../screens/LoadingScreen";
 import { env } from "../services/env";
-
-const queryClient = new QueryClient();
+import { queryClient } from "../lib/queryClient";
 
 export function AppRoot() {
   const [isOnboardingCompleted, setOnboardingCompleted] = useState(false);

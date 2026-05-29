@@ -29,16 +29,6 @@ import * as ImagePicker from "expo-image-picker";
 type RouteProps = RouteProp<BookingFlowParamList, "ServiceSpecific">;
 type Nav = NativeStackNavigationProp<BookingFlowParamList>;
 
-type Field = {
-  key: string;
-  label: string;
-  placeholder: string;
-  helper?: string;
-  type: "text" | "number-chips" | "options-chips";
-  options?: string[];
-};
-
-
 const MAX_NOTES = 300;
 const MAX_IMAGES = 4;
 
@@ -46,7 +36,6 @@ export function ServiceSpecificBookingScreen() {
   const route = useRoute<RouteProps>();
   const navigation = useNavigation<Nav>();
   const { gigId, taskerId, address, latitude, longitude, scheduledAt, timePreference, selectedTierLabel, category } = route.params;
-  const [values, setValues] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [pickingImage, setPickingImage] = useState(false);
@@ -57,10 +46,7 @@ export function ServiceSpecificBookingScreen() {
   });
 
   const { data: categoryData } = useCategoryByName(category);
-  const fields: Field[] = (categoryData?.booking_fields as Field[]) ?? [];
   const icon = categoryData?.icon ?? "📋";
-
-  const setValue = (key: string, val: string) => setValues((prev) => ({ ...prev, [key]: val }));
 
   const pickImage = async () => {
     if (images.length >= MAX_IMAGES) {
@@ -93,62 +79,6 @@ export function ServiceSpecificBookingScreen() {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const renderField = (field: Field) => {
-    switch (field.type) {
-      case "number-chips":
-        return (
-          <View key={field.key} style={styles.fieldContainer}>
-            <Text style={styles.fieldLabel}>{field.label}</Text>
-            <View style={styles.chipsRow}>
-              {["1", "2", "3", "4", "5+"].map((num) => {
-                const isSelected = values[field.key] === num;
-                return (
-                  <Pressable
-                    key={num}
-                    style={[styles.numberChip, isSelected && styles.selectedChip]}
-                    onPress={() => setValue(field.key, num)}
-                  >
-                    <Text style={[styles.chipText, isSelected && styles.selectedChipText]}>{num}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        );
-      case "options-chips":
-        return (
-          <View key={field.key} style={styles.fieldContainer}>
-            <Text style={styles.fieldLabel}>{field.label}</Text>
-            <View style={styles.chipsRow}>
-              {field.options?.map((opt) => {
-                const isSelected = values[field.key] === opt;
-                return (
-                  <Pressable
-                    key={opt}
-                    style={[styles.optionChip, isSelected && styles.selectedChip]}
-                    onPress={() => setValue(field.key, opt)}
-                  >
-                    <Text style={[styles.chipText, isSelected && styles.selectedChipText]}>{opt}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        );
-      default:
-        return (
-          <View key={field.key} style={styles.fieldContainer}>
-            <Input
-              label={field.label}
-              placeholder={field.placeholder}
-              value={values[field.key] ?? ""}
-              onChangeText={(val) => setValue(field.key, val)}
-            />
-          </View>
-        );
-    }
-  };
-
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <SafeAreaView edges={["top"]} style={styles.header}>
@@ -165,10 +95,6 @@ export function ServiceSpecificBookingScreen() {
           <Text style={styles.emoji}>{icon}</Text>
           <Text style={styles.title}>{category} details</Text>
           <Text style={styles.subtitle}>Help us prepare the best quote for you</Text>
-        </View>
-
-        <View style={styles.form}>
-          {fields.map(renderField)}
         </View>
 
         {/* Job description + photos */}
@@ -234,7 +160,7 @@ export function ServiceSpecificBookingScreen() {
             timePreference,
             selectedTierLabel,
             category,
-            details: values,
+            details: {},
             basePrice: gig?.base_price ?? 0,
             notes: notes || undefined,
             imageUris: images.length > 0 ? images : undefined,
@@ -267,49 +193,6 @@ const styles = StyleSheet.create({
   emoji: { fontSize: 40, marginBottom: spacing.sm },
   title: { fontSize: 24, fontWeight: "800", color: colors.text },
   subtitle: { fontSize: 15, color: colors.subtext, marginTop: 4 },
-  form: { marginBottom: spacing.lg },
-  fieldContainer: { marginBottom: spacing.lg },
-  fieldLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.subtext,
-    textTransform: "uppercase",
-    marginBottom: spacing.sm,
-  },
-  chipsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginHorizontal: -spacing.xs,
-  },
-  numberChip: {
-    width: 50,
-    height: 50,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-    margin: spacing.xs,
-    backgroundColor: colors.card,
-  },
-  optionChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-    margin: spacing.xs,
-    backgroundColor: colors.card,
-  },
-  selectedChip: {
-    backgroundColor: colors.brandGreen,
-    borderColor: colors.brandGreen,
-  },
-  chipText: { fontSize: 15, fontWeight: "600", color: colors.text },
-  selectedChipText: { color: "#FFFFFF" },
-
   descSection: { marginBottom: spacing.lg },
   sectionLabel: {
     fontSize: 14,

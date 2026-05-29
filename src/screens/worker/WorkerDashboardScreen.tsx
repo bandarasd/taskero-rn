@@ -264,8 +264,11 @@ export function WorkerDashboardScreen() {
     try {
       await markNotificationRead(n.id);
       qc.invalidateQueries({ queryKey: ["notifications", dbUserId] });
-    } catch {}
-    setShowNotifications(false);
+    } catch (err) {
+      console.error("[WorkerDashboard] markNotificationRead failed:", err);
+    } finally {
+      setShowNotifications(false);
+    }
     const taskId = (n.data as { taskId?: string } | null)?.taskId;
     if (taskId) navigation.navigate("WorkerJobDetail", { taskId });
   };

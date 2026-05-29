@@ -18,7 +18,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getTaskById, submitQuote, respondToQuote, updateTaskStatus, getTaskConflicts } from "../../services/taskService";
+import { getTaskById, submitQuote, respondToQuote, updateTaskStatus, getTaskConflicts, cancelTask } from "../../services/taskService";
 import { getUserById } from "../../services/userService";
 import { createThread } from "../../services/chatService";
 import { Avatar } from "../../components/common/Avatar";
@@ -108,6 +108,17 @@ export function WorkerJobDetailScreen() {
   const [loading, setLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
   const [slaCountdown, setSlaCountdown] = useState("");
+  const [cancelJobModalVisible, setCancelJobModalVisible] = useState(false);
+  const [cancelJobReason, setCancelJobReason] = useState("");
+  const [cancelJobLoading, setCancelJobLoading] = useState(false);
+
+  const WORKER_CANCEL_REASONS = [
+    "Emergency",
+    "Equipment issue",
+    "Schedule conflict",
+    "Unable to reach location",
+    "Other",
+  ];
 
   const { data: task, isLoading } = useQuery({
     queryKey: ["task", taskId],
@@ -180,10 +191,8 @@ export function WorkerJobDetailScreen() {
     setLoading(true);
     try {
       const isDirectAccept = price === expectedTotal;
+      // When isDirectAccept, submitQuote transitions directly to 'accepted' on the backend.
       await submitQuote(taskId, price, quoteNotes || undefined, expiresAt, isDirectAccept);
-      if (isDirectAccept) {
-        await respondToQuote(taskId, true, true);
-      }
       await refresh();
       setQuoteModalVisible(false);
       setQuotePrice("");
@@ -207,6 +216,29 @@ export function WorkerJobDetailScreen() {
       Alert.alert("Error", e.message || "Could not update status");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCancelJob = async () => {
+    if (!cancelJobReason) {
+      Alert.alert("Please select a reason", "Choose a reason to proceed.");
+      return;
+    }
+    setCancelJobLoading(true);
+    try {
+      await cancelTask(taskId, "worker", cancelJobReason);
+      setCancelJobModalVisible(false);
+      await refresh();
+    } catch (err: any) {
+      if (err?.status === 409 || err?.message?.includes("409")) {
+        Alert.alert("Already Updated", "This booking has already been updated.");
+        setCancelJobModalVisible(false);
+        await refresh();
+      } else {
+        Alert.alert("Error", "Could not cancel this job. Please try again.");
+      }
+    } finally {
+      setCancelJobLoading(false);
     }
   };
 
@@ -333,6 +365,59 @@ export function WorkerJobDetailScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Cancel Job Modal */}
+      <Modal
+        visible={cancelJobModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCancelJobModalVisible(false)}
+      >
+        <View style={styles.cancelModalOverlay}>
+          <View style={styles.cancelModalSheet}>
+            <Text style={styles.cancelModalTitle}>Cancel this Job?</Text>
+            <View style={styles.cancelWarningBox}>
+              <Text style={styles.cancelWarningText}>
+                ⚠️ Cancelling will increment your cancellation count. Too many cancellations may affect your account standing.
+              </Text>
+              {(task.tasker?.cancellation_count ?? 0) > 0 && (
+                <Text style={styles.cancelCountText}>
+                  You have cancelled {task.tasker?.cancellation_count} job{(task.tasker?.cancellation_count ?? 0) !== 1 ? "s" : ""} previously.
+                </Text>
+              )}
+            </View>
+            <Text style={styles.cancelReasonLabel}>Reason for cancellation</Text>
+            {WORKER_CANCEL_REASONS.map((r) => (
+              <TouchableOpacity
+                key={r}
+                style={[styles.reasonOption, cancelJobReason === r && styles.reasonOptionSelected]}
+                onPress={() => setCancelJobReason(r)}
+              >
+                <Text style={styles.reasonRadio}>{cancelJobReason === r ? "●" : "○"}</Text>
+                <Text style={[styles.reasonText, cancelJobReason === r && styles.reasonTextSelected]}>{r}</Text>
+              </TouchableOpacity>
+            ))}
+            <View style={styles.cancelModalActions}>
+              <TouchableOpacity
+                style={styles.cancelModalGoBackBtn}
+                onPress={() => setCancelJobModalVisible(false)}
+                disabled={cancelJobLoading}
+              >
+                <Text style={styles.cancelModalGoBackText}>Go Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.cancelModalConfirmBtn, (!cancelJobReason || cancelJobLoading) && { opacity: 0.5 }]}
+                onPress={handleCancelJob}
+                disabled={!cancelJobReason || cancelJobLoading}
+              >
+                <Text style={styles.cancelModalConfirmText}>
+                  {cancelJobLoading ? "Cancelling…" : "Cancel Job"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       <KeyboardAvoidingView
@@ -545,11 +630,19 @@ export function WorkerJobDetailScreen() {
       {(task.status === "accepted" || task.status === "in_progress") && (
         <View style={[styles.stickyBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           {task.status === "accepted" && (
-            <SwipeToConfirm
-              label="Swipe to Start Job"
-              onConfirm={() => handleStatus("in_progress")}
-              loading={loading}
-            />
+            <View style={{ gap: 10 }}>
+              <SwipeToConfirm
+                label="Swipe to Start Job"
+                onConfirm={() => handleStatus("in_progress")}
+                loading={loading}
+              />
+              <TouchableOpacity
+                style={styles.cancelJobLink}
+                onPress={() => { setCancelJobReason(""); setCancelJobModalVisible(true); }}
+              >
+                <Text style={styles.cancelJobLinkText}>Cancel Job</Text>
+              </TouchableOpacity>
+            </View>
           )}
           {task.status === "in_progress" && (
             <Button
@@ -937,5 +1030,119 @@ const styles = StyleSheet.create({
     color: colors.subtext,
     marginTop: 6,
     marginBottom: 4,
+  },
+
+  // Cancel job link
+  cancelJobLink: {
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  cancelJobLinkText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.danger,
+    textDecorationLine: "underline",
+  },
+
+  // Cancel job modal
+  cancelModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  cancelModalSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  cancelModalTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: colors.text,
+    marginBottom: 12,
+  },
+  cancelWarningBox: {
+    backgroundColor: colors.warningLight,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 20,
+  },
+  cancelWarningText: {
+    fontSize: 13,
+    color: colors.warning,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+  cancelCountText: {
+    fontSize: 13,
+    color: colors.warning,
+    marginTop: 6,
+    fontWeight: "500",
+  },
+  cancelReasonLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.subtext,
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  reasonOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginBottom: 8,
+  },
+  reasonOptionSelected: {
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerLight,
+  },
+  reasonRadio: {
+    fontSize: 16,
+    color: colors.subtext,
+  },
+  reasonText: {
+    fontSize: 15,
+    color: colors.text,
+  },
+  reasonTextSelected: {
+    fontWeight: "700",
+    color: colors.danger,
+  },
+  cancelModalActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 20,
+  },
+  cancelModalGoBackBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    alignItems: "center",
+  },
+  cancelModalGoBackText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  cancelModalConfirmBtn: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: colors.danger,
+    alignItems: "center",
+  },
+  cancelModalConfirmText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#fff",
   },
 });

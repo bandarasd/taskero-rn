@@ -18,6 +18,7 @@ export type ApiUser = {
   review_count?: number | null;
   completed_jobs?: number | null;
   no_show_cancellations?: number | null;
+  cancellation_count?: number | null;
   completion_rate?: number | null;
   firebase_uid?: string | null;
   created_at?: string | null;
@@ -105,6 +106,8 @@ export type APITask = {
   overrun_notified_at?: string | null;
   delay_response?: 'wait' | 'cancel' | 'reschedule' | null;
   tasker_new_eta?: string | null;
+  cancelled_by?: 'customer' | 'worker' | null;
+  cancelled_at?: string | null;
   attachments?: string[];
   customer?: ApiUser | null;
   tasker?: ApiUser | null;

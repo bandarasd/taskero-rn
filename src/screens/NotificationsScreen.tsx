@@ -50,7 +50,9 @@ export function NotificationsScreen() {
           navigation.navigate("AppointmentDetail" as never, { taskId } as never);
         }
       }
-    } catch {}
+    } catch (err) {
+      console.error("[NotificationsScreen] handleRead failed:", err);
+    }
   };
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;

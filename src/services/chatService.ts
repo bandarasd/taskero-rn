@@ -9,9 +9,9 @@ function mapMessage(m: any): APIChatMessage {
   };
 }
 
-export async function getChatThreads(userId: string, page = 1, limit = 20) {
+export async function getChatThreads(_userId: string, page = 1, limit = 20) {
   const res = await apiRequest<PaginatedResponse<ChatThread>>(
-    `/chat/threads/${encodeURIComponent(userId)}?page=${page}&limit=${limit}`
+    `/chat/threads?page=${page}&limit=${limit}`
   );
   return res;
 }
@@ -28,14 +28,13 @@ export async function getChatMessages(threadId: string, before?: string, limit =
 export async function sendMessage(
   threadId: string,
   messageText: string,
-  senderId: string,
+  _senderId: string,
   opts?: { messageType?: string; refTaskId?: string }
 ) {
   const msg = await apiRequest<any>("/chat/messages", {
     method: "POST",
     body: {
       thread_id: threadId,
-      sender_id: senderId,
       message_text: messageText,
       message_type: opts?.messageType ?? 'text',
       ref_task_id: opts?.refTaskId ?? null,
@@ -51,9 +50,8 @@ export async function createThread(customerId: string, taskerId: string, taskId?
   });
 }
 
-export async function markMessagesRead(threadId: string, readerId: string) {
+export async function markMessagesRead(threadId: string, _readerId?: string) {
   return apiRequest<{ success: boolean }>(`/chat/messages/${encodeURIComponent(threadId)}/read`, {
     method: "PUT",
-    body: { reader_id: readerId },
   });
 }

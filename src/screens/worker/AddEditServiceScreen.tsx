@@ -193,13 +193,19 @@ export function AddEditServiceScreen() {
     const errors: FieldErrors = {};
     if (!title.trim()) errors.title = "Service title is required";
     if (!description.trim()) errors.description = "Description is required";
-    if (!basePrice || isNaN(parseFloat(basePrice)) || parseFloat(basePrice) <= 0)
+    const parsedPrice = parseFloat(basePrice);
+    if (!basePrice || isNaN(parsedPrice) || parsedPrice <= 0)
       errors.price = "A valid starting price is required";
+    if (parsedPrice > 999999)
+      errors.price = "Price exceeds maximum allowed (Rs. 999,999)";
     if (!serviceArea) errors.serviceArea = "Please set a service area on the map";
     const hasBaseline = visitTiers.some((t) => t.surcharge_value === 0 && t.label.trim());
     if (!hasBaseline) errors.visitTiers = "At least one tier with no surcharge is required";
     const invalidTier = visitTiers.some((t) => !t.label.trim());
     if (invalidTier) errors.visitTiers = "All tiers must have a name";
+    const tierDays = visitTiers.map((t) => t.days);
+    if (new Set(tierDays).size !== tierDays.length)
+      errors.visitTiers = "Each tier must have a unique number of days";
     return errors;
   };
 
@@ -411,11 +417,10 @@ export function AddEditServiceScreen() {
                 <View style={{ width: 80, marginLeft: spacing.sm }}>
                   <Input
                     label="Days"
-                    value={String(tier.days)}
+                    value={tier.days === 0 ? "" : String(tier.days)}
                     onChangeText={(v) => {
-                      const d = parseInt(v) || 1;
                       const updated = [...visitTiers];
-                      updated[idx] = { ...updated[idx], days: d };
+                      updated[idx] = { ...updated[idx], days: v === "" ? 0 : parseInt(v) || updated[idx].days };
                       setVisitTiers(updated);
                     }}
                     keyboardType="number-pad"
@@ -457,11 +462,10 @@ export function AddEditServiceScreen() {
                   </View>
                   <TextInput
                     style={[styles.surchargeInput]}
-                    value={tier.surcharge_value === 0 ? "" : String(tier.surcharge_value)}
+                    value={String(tier.surcharge_value || "")}
                     onChangeText={(v) => {
-                      const val = parseFloat(v) || 0;
                       const updated = [...visitTiers];
-                      updated[idx] = { ...updated[idx], surcharge_value: val };
+                      updated[idx] = { ...updated[idx], surcharge_value: v === "" ? 0 : parseFloat(v) ?? updated[idx].surcharge_value };
                       setVisitTiers(updated);
                     }}
                     keyboardType="decimal-pad"

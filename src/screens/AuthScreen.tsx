@@ -201,7 +201,7 @@ export function AuthScreen() {
           <Pressable style={[styles.primaryBtn, loading && styles.disabled]} onPress={handleVerifyOtp} disabled={loading}>
             <Text style={styles.primaryBtnText}>{loading ? "Verifying..." : "Verify"}</Text>
           </Pressable>
-          <Pressable style={styles.linkBtn} onPress={() => { setStep("phone"); setOtpCode(""); }}>
+          <Pressable style={styles.linkBtn} onPress={() => { setStep("phone"); setOtpCode(""); setVerificationId(null); }}>
             <Text style={styles.linkText}>← Change number</Text>
           </Pressable>
         </>

@@ -67,6 +67,12 @@ export async function apiRequest<T>(
   );
 
   if (!response.ok) {
+    if (response.status === 401) {
+      // Token was rejected server-side (revoked or expired) — sign out so the
+      // user lands on the login screen rather than seeing a cryptic error.
+      firebaseAuth.signOut().catch(() => {});
+      throw new ApiError(401, "Session expired. Please sign in again.");
+    }
     const message = await parseErrorMessage(response);
     throw new ApiError(response.status, message);
   }
@@ -96,6 +102,10 @@ export async function apiUpload<T>(
     `${method} ${path}`
   );
   if (!response.ok) {
+    if (response.status === 401) {
+      firebaseAuth.signOut().catch(() => {});
+      throw new ApiError(401, "Session expired. Please sign in again.");
+    }
     const message = await parseErrorMessage(response);
     throw new ApiError(response.status, message);
   }

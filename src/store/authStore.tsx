@@ -5,6 +5,7 @@ import { firebaseAuth } from "../services/firebase";
 import { ApiUser } from "../types";
 import { getUserByFirebaseUid, getUserByPhone } from "../services/userService";
 import { ApiError } from "../services/apiClient";
+import { queryClient } from "../lib/queryClient";
 
 export type UserRole = "customer" | "worker";
 
@@ -38,25 +39,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isFreshLoginRef = useRef(false);
 
   useEffect(() => {
-    const bootstrap = async () => {
-      const storedRole = await AsyncStorage.getItem(ROLE_KEY);
-      if (storedRole === "customer" || storedRole === "worker") {
-        setRoleState(storedRole);
-      }
-      const storedUserId = await AsyncStorage.getItem(USER_ID_KEY);
-      if (storedUserId) {
-        setDbUserId(storedUserId);
-      }
-    };
-    bootstrap().catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
     let isFirstEvent = true;
 
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (nextUser) => {
-      const isPersistedSession = isFirstEvent && !isFreshLoginRef.current;
-      isFirstEvent = false;
+      // On the first event, read AsyncStorage inline to avoid a race with a
+      // separate bootstrap effect. This ensures role is set before any render.
+      if (isFirstEvent) {
+        isFirstEvent = false;
+        const storedRole = await AsyncStorage.getItem(ROLE_KEY);
+        if (storedRole === "customer" || storedRole === "worker") {
+          setRoleState(storedRole);
+        }
+        const storedUserId = await AsyncStorage.getItem(USER_ID_KEY);
+        if (storedUserId) {
+          setDbUserId(storedUserId);
+        }
+      }
+      const isPersistedSession = !isFreshLoginRef.current;
 
       setUser(nextUser);
       if (!nextUser) {
@@ -124,6 +123,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.multiRemove([ROLE_KEY, USER_ID_KEY]);
     setHasProfile(false);
     setDbUserId(null);
+    setRoleState("customer");
+    queryClient.clear();
   };
 
   const value = useMemo(

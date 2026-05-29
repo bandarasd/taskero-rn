@@ -124,6 +124,15 @@ export function PaymentScreen() {
           );
         })}
 
+        {selectedMethod === "card" && (
+          <View style={styles.amberNote}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.warning} />
+            <Text style={styles.amberNoteText}>
+              Your card will be charged immediately once you accept the tasker's quote.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.secureNote}>
           <Ionicons name="lock-closed-outline" size={14} color={colors.subtext} />
           <Text style={styles.secureText}>Payments are secured & encrypted</Text>

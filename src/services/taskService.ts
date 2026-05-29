@@ -25,7 +25,10 @@ export async function createTask(payload: Partial<APITask>, imageUris?: string[]
       formData.append("photos", { uri, type: "image/jpeg", name: `photo_${i}.jpg` } as any)
     );
     // fire-and-forget — don't block booking confirmation on upload
-    apiUpload<APITask>(`/tasks/${encodeURIComponent(task.id!)}/attachments`, formData).catch(() => {});
+    apiUpload<APITask>(`/tasks/${encodeURIComponent(task.id!)}/attachments`, formData).catch((err) => {
+      console.error("[createTask] Photo upload failed:", err);
+      // Photos are lost — caller should surface a retry option if needed
+    });
   }
   return task;
 }
@@ -85,3 +88,15 @@ export async function rescheduleTask(id: string, scheduledAt: string) {
     body: { scheduled_at: scheduledAt },
   });
 }
+
+export async function cancelTask(
+  taskId: string,
+  cancelledBy: 'customer' | 'worker',
+  reason: string
+): Promise<{ cancelled: boolean; task_id: string; cancelled_by: string; reason: string }> {
+  return apiRequest(`/tasks/${encodeURIComponent(taskId)}/cancel`, {
+    method: "POST",
+    body: { cancelled_by: cancelledBy, reason },
+  });
+}
+

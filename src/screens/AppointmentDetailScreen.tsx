@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, View, TouchableOpacity, Linking, Platform } from "react-native";
+import { Alert, Modal, ScrollView, StyleSheet, Text, View, TouchableOpacity, Linking, Platform } from "react-native";
 import { useQuery, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -8,7 +8,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { usePaymentSheet } from "@stripe/stripe-react-native";
-import { getTaskById, respondToQuote, updateTaskStatus } from "../services/taskService";
+import { getTaskById, respondToQuote, updateTaskStatus, cancelTask } from "../services/taskService";
 import { createPaymentIntent, recordPayment, createOfflinePayment } from "../services/paymentService";
 import { getUserById } from "../services/userService";
 import { createThread } from "../services/chatService";
@@ -164,7 +164,18 @@ export function AppointmentDetailScreen() {
   const [paymentConfirming, setPaymentConfirming] = useState(false);
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
   const [alreadyRated, setAlreadyRated] = useState(false);
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
   const { dbUserId } = useAuth();
+
+  const CUSTOMER_CANCEL_REASONS = [
+    "Schedule conflict",
+    "Found another worker",
+    "No longer needed",
+    "Pricing concern",
+    "Other",
+  ];
 
   const { data: task, isLoading } = useQuery({
     queryKey: ["task", taskId],
@@ -201,7 +212,10 @@ export function AppointmentDetailScreen() {
       respondToQuote(task.id, true).then(() => {
         qc.invalidateQueries({ queryKey: ["task", taskId] });
         qc.invalidateQueries({ queryKey: ["tasks"] });
-      }).catch(() => {});
+      }).catch((err) => {
+        console.error("[auto-accept] respondToQuote failed:", err);
+        Alert.alert("Error", "Could not auto-accept booking. Please accept manually.");
+      });
     }
   }, [task?.status, task?.quoted_price, task?.base_price]);
 
@@ -254,16 +268,16 @@ export function AppointmentDetailScreen() {
           if (presentError.code !== "Canceled") Alert.alert("Payment Failed", presentError.message);
           return;
         }
-        await Promise.all([
-          recordPayment({
-            task_id: taskId,
-            customer_id: dbUserId!,
-            tasker_id: task!.tasker_id!,
-            amount: task!.quoted_price!,
-            stripe_payment_intent_id: payment_intent_id,
-          }),
-          respondToQuote(taskId, true),
-        ]);
+        // Sequential: record payment first, then accept quote.
+        // If recordPayment fails, quote is never accepted (safe to retry).
+        await recordPayment({
+          task_id: taskId,
+          customer_id: dbUserId!,
+          tasker_id: task!.tasker_id!,
+          amount: task!.quoted_price!,
+          stripe_payment_intent_id: payment_intent_id,
+        });
+        await respondToQuote(taskId, true);
       } else {
         await respondToQuote(taskId, true);
         await createOfflinePayment({
@@ -308,6 +322,30 @@ export function AppointmentDetailScreen() {
       Alert.alert("Error", "Could not confirm payment");
     } finally {
       setPaymentConfirming(false);
+    }
+  };
+
+  const handleCancelBooking = async () => {
+    if (!cancelReason) {
+      Alert.alert("Please select a reason", "Choose a cancellation reason to proceed.");
+      return;
+    }
+    setCancelling(true);
+    try {
+      await cancelTask(taskId, "customer", cancelReason);
+      setCancelModalVisible(false);
+      await qc.invalidateQueries({ queryKey: ["task", taskId] });
+      await qc.invalidateQueries({ queryKey: ["tasks"] });
+    } catch (err: any) {
+      if (err?.status === 409 || err?.message?.includes("409")) {
+        Alert.alert("Already Updated", "This booking has already been updated by another party.");
+        setCancelModalVisible(false);
+        await qc.invalidateQueries({ queryKey: ["task", taskId] });
+      } else {
+        Alert.alert("Error", "Could not cancel this booking. Please try again.");
+      }
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -605,12 +643,22 @@ export function AppointmentDetailScreen() {
         )}
 
         {(task.status === "accepted" || task.status === "in_progress") && (
-          <Button
-            label="Message Worker"
-            onPress={handleMessage}
-            loading={messageLoading}
-            fullWidth
-          />
+          <View style={{ gap: 10 }}>
+            <Button
+              label="Message Worker"
+              onPress={handleMessage}
+              loading={messageLoading}
+              fullWidth
+            />
+            {task.status === "accepted" && (
+              <TouchableOpacity
+                style={styles.cancelLink}
+                onPress={() => { setCancelReason(""); setCancelModalVisible(true); }}
+              >
+                <Text style={styles.cancelLinkText}>Cancel Booking</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         )}
         {task.status === "payment_pending" && (
           <View style={styles.disabledBar}>
@@ -654,6 +702,58 @@ export function AppointmentDetailScreen() {
           />
         )}
       </View>}
+
+      {/* Cancel Booking Modal */}
+      <Modal
+        visible={cancelModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCancelModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Cancel Booking?</Text>
+            <Text style={styles.modalSubtitle}>
+              {task?.payment_method === "card"
+                ? "You'll receive an 80% refund. The remaining 20% is a non-refundable cancellation fee."
+                : "Your booking will be cancelled. No charges apply."}
+            </Text>
+            <Text style={styles.modalReasonLabel}>Reason for cancellation</Text>
+            {CUSTOMER_CANCEL_REASONS.map((r) => (
+              <TouchableOpacity
+                key={r}
+                style={[styles.reasonOption, cancelReason === r && styles.reasonOptionSelected]}
+                onPress={() => setCancelReason(r)}
+              >
+                <Ionicons
+                  name={cancelReason === r ? "radio-button-on" : "radio-button-off"}
+                  size={18}
+                  color={cancelReason === r ? colors.danger : colors.subtext}
+                />
+                <Text style={[styles.reasonText, cancelReason === r && styles.reasonTextSelected]}>{r}</Text>
+              </TouchableOpacity>
+            ))}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setCancelModalVisible(false)}
+                disabled={cancelling}
+              >
+                <Text style={styles.modalCancelBtnText}>Go Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, (!cancelReason || cancelling) && { opacity: 0.5 }]}
+                onPress={handleCancelBooking}
+                disabled={!cancelReason || cancelling}
+              >
+                <Text style={styles.modalConfirmBtnText}>
+                  {cancelling ? "Cancelling…" : "Confirm Cancellation"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <RateTaskerModal
         visible={ratingModalVisible}
@@ -953,4 +1053,102 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   disabledBarText: { fontSize: 14, fontWeight: "600", color: colors.subtext },
+
+  // Cancel booking link
+  cancelLink: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  cancelLinkText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.danger,
+    textDecorationLine: "underline",
+  },
+
+  // Cancel modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: colors.text,
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: colors.subtext,
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  modalReasonLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.subtext,
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  reasonOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginBottom: 8,
+  },
+  reasonOptionSelected: {
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerLight,
+  },
+  reasonText: {
+    fontSize: 15,
+    color: colors.text,
+  },
+  reasonTextSelected: {
+    fontWeight: "700",
+    color: colors.danger,
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 20,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    alignItems: "center",
+  },
+  modalCancelBtnText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  modalConfirmBtn: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: colors.danger,
+    alignItems: "center",
+  },
+  modalConfirmBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#fff",
+  },
 });
