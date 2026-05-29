@@ -1,5 +1,5 @@
 import { apiRequest, apiUpload } from "./apiClient";
-import { Gig, ServiceCategory, PaginatedResponse } from "../types";
+import { Gig, ServiceCategory, PaginatedResponse, VisitTier } from "../types";
 
 export type GigServiceArea = {
   latitude: number;
@@ -13,6 +13,7 @@ export type CreateGigPayload = {
   description?: string;
   category: ServiceCategory;
   base_price: number;
+  visit_tiers?: VisitTier[];
   imageUris?: string[];
   serviceArea?: GigServiceArea | null;
 };
@@ -22,6 +23,7 @@ export type UpdateGigPayload = {
   description?: string;
   category?: ServiceCategory;
   base_price?: number;
+  visit_tiers?: VisitTier[];
   imageUris?: string[];
   existingAttachments?: string[];
   serviceArea?: GigServiceArea | null;
@@ -62,6 +64,7 @@ export async function createGig(payload: CreateGigPayload): Promise<Gig> {
   fd.append("category", fields.category);
   fd.append("base_price", String(fields.base_price));
   if (fields.description) fd.append("description", fields.description);
+  if (fields.visit_tiers) fd.append("visit_tiers", JSON.stringify(fields.visit_tiers));
   if (serviceArea) {
     fd.append("service_area_lat", String(serviceArea.latitude));
     fd.append("service_area_lng", String(serviceArea.longitude));
@@ -85,6 +88,7 @@ export async function updateGig(id: string, payload: UpdateGigPayload): Promise<
   if (fields.description !== undefined) fd.append("description", fields.description);
   if (fields.category !== undefined) fd.append("category", fields.category);
   if (fields.base_price !== undefined) fd.append("base_price", String(fields.base_price));
+  if (fields.visit_tiers !== undefined) fd.append("visit_tiers", JSON.stringify(fields.visit_tiers));
   if (existingAttachments !== undefined) {
     fd.append("existingAttachments", JSON.stringify(existingAttachments));
   }

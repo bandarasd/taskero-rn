@@ -63,6 +63,7 @@ export type WorkerStackParamList = {
     initialLng?: number;
     initialRadius?: number;
   };
+  WorkerCalendar: undefined;
 };
 
 const Stack = createNativeStackNavigator<WorkerStackParamList>();

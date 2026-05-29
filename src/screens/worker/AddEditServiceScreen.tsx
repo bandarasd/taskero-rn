@@ -9,6 +9,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -24,7 +25,7 @@ import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { colors } from "../../theme/colors";
 import { radius, spacing } from "../../theme/spacing";
 import { useAuth } from "../../store/authStore";
-import { ServiceCategory } from "../../types";
+import { ServiceCategory, VisitTier } from "../../types";
 import { useCategories } from "../../hooks/useCategories";
 import { serviceAreaResult } from "../../utils/serviceAreaResult";
 import type { WorkerStackParamList } from "../../navigation/stacks/WorkerStack";
@@ -40,6 +41,7 @@ type FieldErrors = {
   description?: string;
   price?: string;
   serviceArea?: string;
+  visitTiers?: string;
 };
 
 // Required label with red asterisk
@@ -77,6 +79,10 @@ export function AddEditServiceScreen() {
   // Service area
   const [serviceArea, setServiceArea] = useState<GigServiceArea | null>(null);
 
+  // Visit tiers
+  const DEFAULT_TIER: VisitTier = { label: "Standard", days: 7, surcharge_type: "percent", surcharge_value: 0 };
+  const [visitTiers, setVisitTiers] = useState<VisitTier[]>([DEFAULT_TIER]);
+
   // Pick up service area result when returning from ServiceAreaPickerScreen
   useEffect(() => {
     const unsub = navigation.addListener("focus", () => {
@@ -104,6 +110,9 @@ export function AddEditServiceScreen() {
       setCategory((existingGig.category as ServiceCategory) ?? "General");
       const attachments = existingGig.attachments;
       if (Array.isArray(attachments)) setExistingAttachments(attachments);
+      if (existingGig.visit_tiers && existingGig.visit_tiers.length > 0) {
+        setVisitTiers(existingGig.visit_tiers);
+      }
       if (existingGig.service_area) {
         setServiceArea({
           latitude: existingGig.service_area.latitude,
@@ -187,6 +196,10 @@ export function AddEditServiceScreen() {
     if (!basePrice || isNaN(parseFloat(basePrice)) || parseFloat(basePrice) <= 0)
       errors.price = "A valid starting price is required";
     if (!serviceArea) errors.serviceArea = "Please set a service area on the map";
+    const hasBaseline = visitTiers.some((t) => t.surcharge_value === 0 && t.label.trim());
+    if (!hasBaseline) errors.visitTiers = "At least one tier with no surcharge is required";
+    const invalidTier = visitTiers.some((t) => !t.label.trim());
+    if (invalidTier) errors.visitTiers = "All tiers must have a name";
     return errors;
   };
 
@@ -215,6 +228,7 @@ export function AddEditServiceScreen() {
           description: description.trim(),
           base_price: parseFloat(basePrice),
           category,
+          visit_tiers: visitTiers,
           imageUris: newImageUris,
           existingAttachments,
           serviceArea,
@@ -226,6 +240,7 @@ export function AddEditServiceScreen() {
           description: description.trim(),
           base_price: parseFloat(basePrice),
           category,
+          visit_tiers: visitTiers,
           imageUris: newImageUris,
           serviceArea,
         });
@@ -368,6 +383,112 @@ export function AddEditServiceScreen() {
         </Pressable>
         {serviceAreaError && (
           <Text style={styles.fieldError}>{serviceAreaError}</Text>
+        )}
+
+        {/* Visit Tiers */}
+        <RequiredLabel text="Visit Speed Tiers" />
+        <Text style={styles.tierHint}>
+          Define how quickly you can visit. At least one tier must have no surcharge (your standard rate).
+        </Text>
+        {visitTiers.map((tier, idx) => {
+          const isBaseline = tier.surcharge_value === 0;
+          return (
+            <View key={idx} style={styles.tierRow}>
+              <View style={styles.tierRowTop}>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label="Tier name"
+                    value={tier.label}
+                    onChangeText={(v) => {
+                      const updated = [...visitTiers];
+                      updated[idx] = { ...updated[idx], label: v };
+                      setVisitTiers(updated);
+                    }}
+                    placeholder="e.g. Standard"
+                    style={styles.tierInput}
+                  />
+                </View>
+                <View style={{ width: 80, marginLeft: spacing.sm }}>
+                  <Input
+                    label="Days"
+                    value={String(tier.days)}
+                    onChangeText={(v) => {
+                      const d = parseInt(v) || 1;
+                      const updated = [...visitTiers];
+                      updated[idx] = { ...updated[idx], days: d };
+                      setVisitTiers(updated);
+                    }}
+                    keyboardType="number-pad"
+                    style={styles.tierInput}
+                  />
+                </View>
+                {visitTiers.length > 1 && !isBaseline && (
+                  <Pressable
+                    style={styles.tierDeleteBtn}
+                    onPress={() => setVisitTiers(visitTiers.filter((_, i) => i !== idx))}
+                  >
+                    <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                  </Pressable>
+                )}
+              </View>
+              {!isBaseline && (
+                <View style={styles.tierSurchargeRow}>
+                  <View style={styles.surchargeTypeToggle}>
+                    <Pressable
+                      style={[styles.toggleBtn, tier.surcharge_type === "percent" && styles.toggleBtnActive]}
+                      onPress={() => {
+                        const updated = [...visitTiers];
+                        updated[idx] = { ...updated[idx], surcharge_type: "percent" };
+                        setVisitTiers(updated);
+                      }}
+                    >
+                      <Text style={[styles.toggleBtnText, tier.surcharge_type === "percent" && styles.toggleBtnTextActive]}>%</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.toggleBtn, tier.surcharge_type === "flat" && styles.toggleBtnActive]}
+                      onPress={() => {
+                        const updated = [...visitTiers];
+                        updated[idx] = { ...updated[idx], surcharge_type: "flat" };
+                        setVisitTiers(updated);
+                      }}
+                    >
+                      <Text style={[styles.toggleBtnText, tier.surcharge_type === "flat" && styles.toggleBtnTextActive]}>Rs.</Text>
+                    </Pressable>
+                  </View>
+                  <TextInput
+                    style={[styles.surchargeInput]}
+                    value={tier.surcharge_value === 0 ? "" : String(tier.surcharge_value)}
+                    onChangeText={(v) => {
+                      const val = parseFloat(v) || 0;
+                      const updated = [...visitTiers];
+                      updated[idx] = { ...updated[idx], surcharge_value: val };
+                      setVisitTiers(updated);
+                    }}
+                    keyboardType="decimal-pad"
+                    placeholder={tier.surcharge_type === "percent" ? "e.g. 20" : "e.g. 1000"}
+                    placeholderTextColor={colors.placeholder}
+                  />
+                </View>
+              )}
+            </View>
+          );
+        })}
+        {fieldErrors.visitTiers && (
+          <Text style={styles.fieldError}>{fieldErrors.visitTiers}</Text>
+        )}
+        {visitTiers.length < 4 && (
+          <Pressable
+            style={styles.addTierBtn}
+            onPress={() =>
+              setVisitTiers([
+                ...visitTiers,
+                { label: "", days: 3, surcharge_type: "percent", surcharge_value: 20 },
+              ])
+            }
+          >
+            <Ionicons name="add-circle-outline" size={18} color={colors.brandGreen} />
+            <Text style={styles.addTierText}>Add faster tier</Text>
+          </Pressable>
         )}
 
         <Button
@@ -557,4 +678,56 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   lockText: { fontSize: 11, color: colors.warning, fontWeight: "600" },
+
+  // Visit tiers
+  tierHint: { fontSize: 12, color: colors.subtext, marginBottom: spacing.sm, lineHeight: 17 },
+  tierRow: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  tierRowTop: { flexDirection: "row", alignItems: "flex-start" },
+  tierSurchargeRow: { flexDirection: "row", alignItems: "center", marginTop: spacing.sm, gap: spacing.sm },
+  surchargeInput: {
+    flex: 1,
+    height: 40,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: colors.text,
+    backgroundColor: colors.background,
+  },
+  tierInput: { height: 40, fontSize: 14 },
+  tierDeleteBtn: {
+    marginLeft: spacing.sm,
+    marginTop: 24,
+    padding: spacing.xs,
+  },
+  surchargeTypeToggle: {
+    flexDirection: "row",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    overflow: "hidden",
+  },
+  toggleBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: colors.background,
+  },
+  toggleBtnActive: { backgroundColor: colors.brandGreen },
+  toggleBtnText: { fontSize: 13, fontWeight: "600", color: colors.subtext },
+  toggleBtnTextActive: { color: "#fff" },
+  addTierBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: spacing.sm,
+  },
+  addTierText: { fontSize: 14, color: colors.brandGreen, fontWeight: "600" },
 });

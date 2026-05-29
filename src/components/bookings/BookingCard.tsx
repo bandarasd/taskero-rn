@@ -62,7 +62,7 @@ export function BookingCard({ task, onPress }: Props) {
 
         <View style={styles.priceContainer}>
           {task.quoted_price != null || task.base_price != null ? (
-            <Text style={styles.price}>Rs. {task.quoted_price ?? task.base_price}</Text>
+            <Text style={styles.price}>Rs. {task.quoted_price ?? (Number(task.base_price ?? 0) + Number(task.surcharge_amount ?? 0))}</Text>
           ) : (
             <Text style={styles.awaitingQuote}>Awaiting quote</Text>
           )}

@@ -45,7 +45,7 @@ const MAX_IMAGES = 4;
 export function ServiceSpecificBookingScreen() {
   const route = useRoute<RouteProps>();
   const navigation = useNavigation<Nav>();
-  const { gigId, taskerId, address, latitude, longitude, scheduledAt, category } = route.params;
+  const { gigId, taskerId, address, latitude, longitude, scheduledAt, timePreference, selectedTierLabel, category } = route.params;
   const [values, setValues] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
   const [images, setImages] = useState<string[]>([]);
@@ -231,6 +231,8 @@ export function ServiceSpecificBookingScreen() {
             latitude,
             longitude,
             scheduledAt,
+            timePreference,
+            selectedTierLabel,
             category,
             details: values,
             basePrice: gig?.base_price ?? 0,

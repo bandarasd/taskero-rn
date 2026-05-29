@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View, TouchableOpacity, Linking, Platform } from "react-native";
 import { useQuery, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -18,7 +18,7 @@ import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { Avatar } from "../components/common/Avatar";
 import { Button } from "../components/common/Button";
 import { colors } from "../theme/colors";
-import { spacing } from "../theme/spacing";
+import { radius, spacing } from "../theme/spacing";
 import { TaskStatus } from "../types";
 import type { CustomerStackParamList } from "../navigation/stacks/CustomerStack";
 import { RateTaskerModal } from "../components/rating/RateTaskerModal";
@@ -186,6 +186,24 @@ export function AppointmentDetailScreen() {
     enabled: task?.status === "completed",
   });
   const existingReviews = existingReviewsData?.pages.flatMap((p) => p.data);
+
+  const autoAcceptedRef = useRef(false);
+  useEffect(() => {
+    if (
+      task &&
+      task.status === "quoted" &&
+      task.quoted_price != null &&
+      task.base_price != null &&
+      Number(task.quoted_price) === Number(task.base_price) &&
+      !autoAcceptedRef.current
+    ) {
+      autoAcceptedRef.current = true;
+      respondToQuote(task.id, true).then(() => {
+        qc.invalidateQueries({ queryKey: ["task", taskId] });
+        qc.invalidateQueries({ queryKey: ["tasks"] });
+      }).catch(() => {});
+    }
+  }, [task?.status, task?.quoted_price, task?.base_price]);
 
   useEffect(() => {
     if (task?.status === "completed" && existingReviews !== undefined) {
@@ -360,35 +378,59 @@ export function AppointmentDetailScreen() {
           </View>
         </View>
 
+        {/* Late penalty banner */}
+        {(task.late_penalty_percent ?? 0) > 0 && (
+          <View style={styles.latePenaltyBanner}>
+            <Ionicons name="alert-circle" size={18} color={colors.warning} />
+            <Text style={styles.latePenaltyText}>
+              Late visit penalty applied: {task.late_penalty_percent}% off your final price
+              {task.late_penalty_amount != null ? ` (−Rs. ${Math.round(Number(task.late_penalty_amount))})` : ""}
+            </Text>
+          </View>
+        )}
+
         {/* 4. Booking Details Section */}
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>APPOINTMENT DETAILS</Text>
-          <DetailRow 
-            icon="calendar-outline" 
-            label="Date" 
-            value={fmtDate(task.scheduled_at)} 
+          <DetailRow
+            icon="calendar-outline"
+            label="Preferred date"
+            value={fmtDate(task.scheduled_at)}
           />
-          <DetailRow 
-            icon="time-outline" 
-            label="Time" 
-            value={fmtTime(task.scheduled_at) || "—"} 
-          />
-          <DetailRow 
-            icon="location-outline" 
-            label="Location" 
-            value={task.location_address ?? "—"} 
+          {task.time_preference && (
+            <DetailRow
+              icon="time-outline"
+              label="Time of day"
+              value={
+                task.time_preference === "morning" ? "Morning (8 AM – 12 PM)" :
+                task.time_preference === "afternoon" ? "Afternoon (12 PM – 5 PM)" :
+                "Evening (5 PM – 8 PM)"
+              }
+            />
+          )}
+          {task.selected_tier_label && (
+            <DetailRow
+              icon="flash-outline"
+              label="Visit speed"
+              value={`${task.selected_tier_label} — within ${task.selected_tier_days ?? "?"} day${(task.selected_tier_days ?? 0) !== 1 ? "s" : ""}`}
+            />
+          )}
+          <DetailRow
+            icon="location-outline"
+            label="Location"
+            value={task.location_address ?? "—"}
             onPress={openInMaps}
           />
-          <DetailRow 
-            icon="grid-outline" 
-            label="Category" 
-            value={task.category ?? "—"} 
+          <DetailRow
+            icon="grid-outline"
+            label="Category"
+            value={task.category ?? "—"}
           />
           {task.notes ? (
-            <DetailRow 
-              icon="document-text-outline" 
-              label="Notes" 
-              value={task.notes} 
+            <DetailRow
+              icon="document-text-outline"
+              label="Notes"
+              value={task.notes}
               isLast
             />
           ) : null}
@@ -403,7 +445,14 @@ export function AppointmentDetailScreen() {
               {task.base_price != null ? `Rs. ${task.base_price}` : "—"}
             </Text>
           </View>
-          
+
+          {(task.surcharge_amount ?? 0) > 0 && (
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>{task.selected_tier_label} surcharge</Text>
+              <Text style={styles.priceValue}>+Rs. {task.surcharge_amount}</Text>
+            </View>
+          )}
+
           {task.quoted_price != null && (
             <View style={styles.priceRow}>
               <Text style={styles.priceLabel}>Quoted Price</Text>
@@ -413,6 +462,13 @@ export function AppointmentDetailScreen() {
 
           {task.status === "pending" && !task.quoted_price && (
             <Text style={styles.pendingQuoteText}>Pending quote from worker</Text>
+          )}
+
+          {(task.late_penalty_percent ?? 0) > 0 && task.final_price != null && (
+            <View style={styles.priceRow}>
+              <Text style={[styles.priceLabel, { color: colors.warning }]}>Late penalty (−{task.late_penalty_percent}%)</Text>
+              <Text style={[styles.priceValue, { color: colors.warning }]}>−Rs. {Math.round(Number(task.late_penalty_amount ?? 0))}</Text>
+            </View>
           )}
 
           {task.final_price != null && (
@@ -786,6 +842,17 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: 16, fontWeight: "700", color: colors.text },
   totalValue: { fontSize: 18, fontWeight: "800", color: colors.brandGreen },
   pendingQuoteText: { fontSize: 14, color: colors.subtext, fontStyle: "italic", marginTop: 4 },
+  latePenaltyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.warningLight,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    margin: spacing.md,
+    marginBottom: 0,
+  },
+  latePenaltyText: { flex: 1, fontSize: 13, fontWeight: "600", color: colors.warning, lineHeight: 18 },
 
   // Completion Payment Banner
   completionBanner: {

@@ -8,13 +8,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { getTaskById, updateTaskStatus, reportRunningLate, getNextBooking } from "../../services/taskService";
+import { getTaskById, updateTaskStatus } from "../../services/taskService";
 import { getUserById } from "../../services/userService";
 import { createThread } from "../../services/chatService";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
@@ -39,15 +40,6 @@ function fmtElapsed(seconds: number) {
   return `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 
-function fmtDuration(minutes?: number | null) {
-  if (!minutes) return null;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h === 0) return `${m} min`;
-  if (m === 0) return `${h} hr`;
-  return `${h}h ${m}m`;
-}
-
 function fmtTime(iso?: string | null) {
   if (!iso) return null;
   return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
@@ -64,13 +56,9 @@ export function WorkerActiveJobScreen() {
   const [elapsed, setElapsed] = useState(0);
   const [messageLoading, setMessageLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const [runningLateReported, setRunningLateReported] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasSeededElapsed = useRef(false);
-  const hasSeededLateReported = useRef(false);
-  const overtimeAlertShown = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const ringAnim = useRef(new Animated.Value(0)).current;
 
   const { data: task, isLoading } = useQuery({
     queryKey: ["task", taskId],
@@ -81,14 +69,6 @@ export function WorkerActiveJobScreen() {
     queryKey: ["user", task?.customer_id],
     queryFn: () => getUserById(task!.customer_id),
     enabled: !!task?.customer_id,
-  });
-
-  const { data: nextBookingData } = useQuery({
-    queryKey: ["next-booking", taskId],
-    queryFn: () => getNextBooking(taskId),
-    enabled: !!task,
-    // Poll every 60s so it stays fresh as time passes
-    refetchInterval: 60_000,
   });
 
   const startedAtRef = useRef<string | null>(null);
@@ -107,16 +87,6 @@ export function WorkerActiveJobScreen() {
       hasSeededElapsed.current = true;
     }
   }, [task?.started_at]);
-
-  useEffect(() => {
-    if (task && !hasSeededLateReported.current) {
-      hasSeededLateReported.current = true;
-      if (task.overrun_notified_at) {
-        setRunningLateReported(true);
-        overtimeAlertShown.current = true;
-      }
-    }
-  }, [task]);
 
   useEffect(() => {
     // Recalculate from started_at on foreground resume so backgrounded time is included
@@ -148,46 +118,12 @@ export function WorkerActiveJobScreen() {
     return () => loop.stop();
   }, []);
 
-  // Auto-popup when worker first crosses the grace period with a next booking waiting
-  useEffect(() => {
-    if (overtimeAlertShown.current || runningLateReported) return;
-    const estSecs = (task?.estimated_duration_minutes ?? 0) * 60;
-    if (estSecs > 0 && elapsed > estSecs) {
-      overtimeAlertShown.current = true;
-      Alert.alert(
-        "You're Running Over Time",
-        "You've exceeded your estimated duration. How much longer do you need?",
-        [
-          { text: "15 more minutes", onPress: () => sendLateReport(15) },
-          { text: "30 more minutes", onPress: () => sendLateReport(30) },
-          { text: "1 hour", onPress: () => sendLateReport(60) },
-          { text: "Dismiss", style: "cancel" },
-        ]
-      );
-    }
-  }, [elapsed, task?.estimated_duration_minutes, runningLateReported]);
-
   if (isLoading || !task) return <LoadingSpinner />;
 
   const displayCustomer = customer || task.customer;
   const customerName = displayCustomer
     ? `${displayCustomer.first_name ?? ""} ${displayCustomer.last_name ?? ""}`.trim()
     : "Customer";
-
-  const estimatedSeconds = (task.estimated_duration_minutes ?? 0) * 60;
-  const bufferSeconds = (nextBookingData?.buffer_minutes ?? 30) * 60;
-  const gracePeriodSeconds = estimatedSeconds + bufferSeconds;
-  const progress = estimatedSeconds > 0 ? Math.min(elapsed / estimatedSeconds, 1) : 0;
-  const overTime = estimatedSeconds > 0 && elapsed > estimatedSeconds;
-  // Show the "Running Late" button only after the full grace period (estimate + buffer) has elapsed
-  // AND only if there is actually a next customer booked right after this slot
-  const showRunningLateBtn =
-    gracePeriodSeconds > 0 &&
-    elapsed > gracePeriodSeconds &&
-    !!nextBookingData?.next_booking;
-  const remainingSeconds = estimatedSeconds - elapsed;
-  const remainingMinutes = Math.ceil(Math.abs(remainingSeconds) / 60);
-  const accentColor = overTime ? colors.warning : colors.brandGreen;
 
   const handleMessage = async () => {
     if (!task.customer_id || !dbUserId) return;
@@ -212,35 +148,6 @@ export function WorkerActiveJobScreen() {
     } catch (e: any) {
       Alert.alert("Error", e.message || "Could not update job status");
       setCompleting(false);
-    }
-  };
-
-  const handleRunningLate = () => {
-    Alert.alert(
-      "How much longer do you need?",
-      "Your next customer will be notified of the delay.",
-      [
-        { text: "15 more minutes", onPress: () => sendLateReport(15) },
-        { text: "30 more minutes", onPress: () => sendLateReport(30) },
-        { text: "1 hour", onPress: () => sendLateReport(60) },
-        { text: "Cancel", style: "cancel" },
-      ]
-    );
-  };
-
-  const sendLateReport = async (extraMinutes: number) => {
-    try {
-      const result = await reportRunningLate(taskId, extraMinutes);
-      setRunningLateReported(true);
-      if (result.affected) {
-        Alert.alert("Done", "Your next customer has been notified of the delay.");
-      } else if (result.no_next_booking) {
-        Alert.alert("Noted", "No upcoming bookings are affected.");
-      } else {
-        Alert.alert("Noted", "You're still within the buffer window. No notification sent.");
-      }
-    } catch {
-      Alert.alert("Error", "Could not send the notification. Please try again.");
     }
   };
 
@@ -269,33 +176,17 @@ export function WorkerActiveJobScreen() {
 
         {/* Title + timer row */}
         <View style={styles.headerBody}>
-          {/* Left: title + time info */}
+          {/* Left: title */}
           <View style={styles.headerLeft}>
             <Text style={styles.jobTitle}>
               {task.gig_title ?? task.title ?? "Active Job"}
             </Text>
-            {estimatedSeconds > 0 && (
-              <View style={[styles.timeBadge, { backgroundColor: overTime ? colors.warning : "rgba(255,255,255,0.22)" }]}>
-                <Ionicons name={overTime ? "warning" : "time-outline"} size={12} color="#fff" />
-                <Text style={styles.timeBadgeText}>
-                  {overTime ? `${remainingMinutes}m over estimate` : `~${remainingMinutes}m left`}
-                </Text>
-              </View>
-            )}
-            {task.estimated_duration_minutes ? (
-              <Text style={styles.estimateHint}>
-                Est. {fmtDuration(task.estimated_duration_minutes)}
-              </Text>
-            ) : null}
           </View>
 
           {/* Right: timer ring */}
           <View style={styles.ringWrapper}>
             <Animated.View style={[styles.glowRing, { transform: [{ scale: pulseAnim }] }]} />
-            <View style={[styles.ringTrack, overTime && { borderColor: "rgba(255,255,255,0.85)" }]}>
-              {estimatedSeconds > 0 && (
-                <ArcProgress progress={progress} color="#fff" />
-              )}
+            <View style={styles.ringTrack}>
               <View style={styles.ringInner}>
                 <Text style={styles.timerClock}>{fmtElapsed(elapsed)}</Text>
                 <Text style={styles.timerLabel}>ELAPSED</Text>
@@ -350,18 +241,6 @@ export function WorkerActiveJobScreen() {
 
       {/* ── Bottom bar ── */}
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        {showRunningLateBtn && !runningLateReported && (
-          <TouchableOpacity style={styles.runningLateBtn} onPress={handleRunningLate}>
-            <Ionicons name="warning-outline" size={15} color={colors.warning} />
-            <Text style={styles.runningLateBtnText}>I'm Running Late — Notify Next Customer</Text>
-          </TouchableOpacity>
-        )}
-        {runningLateReported && (
-          <View style={styles.runningLateConfirmed}>
-            <Ionicons name="checkmark-circle-outline" size={15} color={colors.brandGreen} />
-            <Text style={styles.runningLateConfirmedText}>Next customer notified</Text>
-          </View>
-        )}
         <SwipeToConfirm
           label="Swipe to Complete Job"
           onConfirm={handleComplete}
@@ -381,60 +260,6 @@ function DetailRow({ icon, label, value, last }: { icon: keyof typeof Ionicons.g
       </View>
       <Text style={styles.detailLabel}>{label}</Text>
       <Text style={styles.detailValue}>{value}</Text>
-    </View>
-  );
-}
-
-function ArcProgress({ progress, color }: { progress: number; color: string }) {
-  const SIZE = 140;
-  const half = SIZE / 2;
-  const BORDER = 6;
-
-  // Clamp to [0, 1]
-  const p = Math.min(Math.max(progress, 0), 1);
-
-  // Degrees: 0% = -90deg (top), 100% = 270deg
-  const degrees = p * 360 - 90;
-
-  return (
-    <View style={{ position: "absolute", width: SIZE, height: SIZE }} pointerEvents="none">
-      {/* Right half-circle (fills 0% → 50%) */}
-      <View style={{
-        position: "absolute", top: 0, right: 0,
-        width: half, height: SIZE,
-        overflow: "hidden",
-      }}>
-        <View style={{
-          position: "absolute", top: 0, left: -half,
-          width: SIZE, height: SIZE,
-          borderRadius: half,
-          borderWidth: BORDER,
-          borderColor: "transparent",
-          borderRightColor: p > 0 ? color : "transparent",
-          borderBottomColor: p >= 0.5 ? color : "transparent",
-          transform: [{ rotate: p <= 0.5 ? `${(p / 0.5) * 90 - 90}deg` : "0deg" }],
-        }} />
-      </View>
-
-      {/* Left half-circle (fills 50% → 100%) */}
-      {p > 0.5 && (
-        <View style={{
-          position: "absolute", top: 0, left: 0,
-          width: half, height: SIZE,
-          overflow: "hidden",
-        }}>
-          <View style={{
-            position: "absolute", top: 0, left: 0,
-            width: SIZE, height: SIZE,
-            borderRadius: half,
-            borderWidth: BORDER,
-            borderColor: "transparent",
-            borderLeftColor: color,
-            borderTopColor: p >= 1 ? color : "transparent",
-            transform: [{ rotate: `${((p - 0.5) / 0.5) * 90}deg` }],
-          }} />
-        </View>
-      )}
     </View>
   );
 }
@@ -490,22 +315,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     lineHeight: 26,
   },
-  timeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  timeBadgeText: { fontSize: 12, fontWeight: "700", color: "#fff" },
-  estimateHint: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.6)",
-    fontWeight: "500",
-  },
-
   ringWrapper: {
     width: 140,
     height: 140,
@@ -671,33 +480,5 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -3 },
     elevation: 10,
     gap: 10,
-  },
-  runningLateBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 11,
-    borderRadius: 12,
-    backgroundColor: colors.warningLight,
-    borderWidth: 1,
-    borderColor: "rgba(245,158,11,0.2)",
-  },
-  runningLateBtnText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.warning,
-  },
-  runningLateConfirmed: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-  },
-  runningLateConfirmedText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.brandGreen,
   },
 });

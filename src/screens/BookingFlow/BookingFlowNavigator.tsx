@@ -13,7 +13,7 @@ import type { CustomerStackParamList } from "../../navigation/stacks/CustomerSta
 export type BookingFlowParamList = {
   LocationSelection: { gigId: string };
   DateTimeSelection: { gigId: string; taskerId: string; address: string; latitude?: number; longitude?: number };
-  ServiceSpecific: { gigId: string; taskerId: string; address: string; latitude?: number; longitude?: number; scheduledAt: string; category: ServiceCategory };
+  ServiceSpecific: { gigId: string; taskerId: string; address: string; latitude?: number; longitude?: number; scheduledAt: string; timePreference?: string; selectedTierLabel: string; category: ServiceCategory };
   ReviewSummary: {
     gigId: string;
     taskerId: string;
@@ -21,6 +21,8 @@ export type BookingFlowParamList = {
     latitude?: number;
     longitude?: number;
     scheduledAt: string;
+    timePreference?: string;
+    selectedTierLabel?: string;
     category: ServiceCategory;
     details: Record<string, string | number>;
     basePrice: number;
@@ -34,13 +36,15 @@ export type BookingFlowParamList = {
     latitude?: number;
     longitude?: number;
     scheduledAt: string;
+    timePreference?: string;
+    selectedTierLabel?: string;
     category: ServiceCategory;
     details: Record<string, string | number>;
     basePrice: number;
     notes?: string;
     imageUris?: string[];
   };
-  PaymentSuccess: { taskId: string; scheduledAt: string; address: string };
+  PaymentSuccess: { taskId: string; scheduledAt: string; address: string; timePreference?: string };
 };
 
 const Stack = createNativeStackNavigator<BookingFlowParamList>();

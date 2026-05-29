@@ -13,6 +13,7 @@ import { WorkerMessagesScreen } from "../../screens/worker/WorkerMessagesScreen"
 import { WorkerChatScreen } from "../../screens/worker/WorkerChatScreen";
 import { WorkerProfileScreen } from "../../screens/worker/WorkerProfileScreen";
 import { WorkerServicesScreen } from "../../screens/worker/WorkerServicesScreen";
+import { WorkerCalendarScreen } from "../../screens/worker/WorkerCalendarScreen";
 import { AddEditServiceScreen } from "../../screens/worker/AddEditServiceScreen";
 import { WorkerEarningsScreen } from "../../screens/worker/WorkerEarningsScreen";
 import { WorkerReviewsScreen } from "../../screens/worker/WorkerReviewsScreen";
@@ -82,7 +83,8 @@ const SchedStack = createNativeStackNavigator<WorkerStackParamList>();
 function ScheduleStackNav() {
   return (
     <SchedStack.Navigator screenOptions={{ headerShown: true, headerBackTitle: "" }}>
-      <SchedStack.Screen name="WorkerSchedule" component={WorkerScheduleScreen} options={{ headerShown: false }} />
+      <SchedStack.Screen name="WorkerCalendar" component={WorkerCalendarScreen} options={{ headerShown: false }} />
+      <SchedStack.Screen name="WorkerSchedule" component={WorkerScheduleScreen} options={{ title: "Availability" }} />
       {sharedScreens(SchedStack)}
     </SchedStack.Navigator>
   );
@@ -123,7 +125,7 @@ const Tab = createBottomTabNavigator<WorkerTabParamList>();
 const ICONS: Record<keyof WorkerTabParamList, { active: any; inactive: any }> = {
   DashboardTab: { active: "grid", inactive: "grid-outline" },
   JobsTab:      { active: "briefcase", inactive: "briefcase-outline" },
-  ScheduleTab:  { active: "calendar", inactive: "calendar-outline" },
+  ScheduleTab:  { active: "calendar-number", inactive: "calendar-number-outline" },
   MessagesTab:  { active: "chatbubbles", inactive: "chatbubbles-outline" },
   ProfileTab:   { active: "person", inactive: "person-outline" },
 };
@@ -131,7 +133,7 @@ const ICONS: Record<keyof WorkerTabParamList, { active: any; inactive: any }> = 
 const LABELS: Record<keyof WorkerTabParamList, string> = {
   DashboardTab: "Dashboard",
   JobsTab: "Jobs",
-  ScheduleTab: "Schedule",
+  ScheduleTab: "Calendar",
   MessagesTab: "Messages",
   ProfileTab: "Profile",
 };

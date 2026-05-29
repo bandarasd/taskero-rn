@@ -27,6 +27,15 @@ export type ApiUser = {
 
 export type ServiceCategory = string;
 
+// ─── Visit Tiers ─────────────────────────────────────────────────────────────
+
+export type VisitTier = {
+  label: string;
+  days: number;
+  surcharge_type: 'percent' | 'flat';
+  surcharge_value: number;
+};
+
 // ─── Gig ─────────────────────────────────────────────────────────────────────
 
 export type Gig = {
@@ -36,6 +45,7 @@ export type Gig = {
   description?: string | null;
   category: ServiceCategory;
   base_price: number;
+  visit_tiers?: VisitTier[];
   status?: "active" | "paused" | string;
   attachments?: string[];
   service_area?: {
@@ -74,6 +84,13 @@ export type APITask = {
   location_latitude?: number | null;
   location_longitude?: number | null;
   scheduled_at?: string | null;
+  time_preference?: 'morning' | 'afternoon' | 'evening' | null;
+  selected_tier_label?: string | null;
+  selected_tier_days?: number | null;
+  surcharge_amount?: number | null;
+  promised_visit_date?: string | null;
+  late_penalty_percent?: number | null;
+  late_penalty_amount?: number | null;
   started_at?: string | null;
   completed_at?: string | null;
   base_price?: number | null;
@@ -105,9 +122,9 @@ export type DayOfWeek = "sunday" | "monday" | "tuesday" | "wednesday" | "thursda
 export type TaskerScheduleEntry = {
   day: DayOfWeek;
   is_available: boolean;
-  start_time?: string | null; // "HH:mm"
-  end_time?: string | null;   // "HH:mm"
-  buffer_minutes?: number;
+  morning_available: boolean;
+  afternoon_available: boolean;
+  evening_available: boolean;
 };
 
 export type TaskerSchedule = TaskerScheduleEntry[];
@@ -116,14 +133,19 @@ export type TaskerSchedule = TaskerScheduleEntry[];
 export type TaskerSchedulePayloadEntry = {
   day_of_week: number; // 0=Sunday … 6=Saturday
   is_active: boolean;
-  start_time: string;
-  end_time: string;
-  buffer_minutes?: number;
+  morning_available?: boolean;
+  afternoon_available?: boolean;
+  evening_available?: boolean;
 };
 
-export type AvailableSlotsResponse = {
-  date: string;
-  slots: string[]; // ["09:00", "10:00", ...]
+export type TimePreference = 'morning' | 'afternoon' | 'evening';
+
+export type AvailableTimePrefResponse = {
+  available: boolean;
+  morning: boolean;
+  afternoon: boolean;
+  evening: boolean;
+  pending_count?: { morning: number; afternoon: number; evening: number };
 };
 
 // ─── Review ──────────────────────────────────────────────────────────────────

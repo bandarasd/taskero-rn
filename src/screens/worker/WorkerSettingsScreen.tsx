@@ -61,9 +61,8 @@ export function WorkerSettingsScreen() {
   useEffect(() => {
     if (!dbUserId) return;
     getSchedule(dbUserId)
-      .then((schedule) => {
-        const first = schedule.find((e) => e.buffer_minutes != null);
-        if (first?.buffer_minutes != null) setGracePeriod(first.buffer_minutes);
+      .then((_schedule) => {
+        // buffer_minutes removed; grace period setting is a no-op for now
       })
       .catch(() => {});
   }, [dbUserId]);

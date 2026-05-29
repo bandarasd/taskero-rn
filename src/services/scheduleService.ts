@@ -1,5 +1,5 @@
 import { apiRequest } from "./apiClient";
-import { TaskerSchedule, TaskerSchedulePayloadEntry, AvailableSlotsResponse } from "../types";
+import { TaskerSchedule, TaskerSchedulePayloadEntry, AvailableTimePrefResponse } from "../types";
 
 const DAY_INDEX: Record<string, number> = {
   sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
@@ -16,9 +16,9 @@ export async function getSchedule(taskerId: string): Promise<TaskerSchedule> {
   return rows.map((row) => ({
     day: DAY_NAME[row.day_of_week],
     is_available: row.is_active,
-    start_time: row.start_time,
-    end_time: row.end_time,
-    buffer_minutes: row.buffer_minutes ?? 30,
+    morning_available: row.morning_available ?? true,
+    afternoon_available: row.afternoon_available ?? true,
+    evening_available: row.evening_available ?? true,
   })) as TaskerSchedule;
 }
 
@@ -26,9 +26,9 @@ export async function updateSchedule(taskerId: string, schedule: TaskerSchedule)
   const payload: TaskerSchedulePayloadEntry[] = schedule.map((entry) => ({
     day_of_week: DAY_INDEX[entry.day],
     is_active: entry.is_available,
-    start_time: entry.start_time ?? "08:00",
-    end_time: entry.end_time ?? "18:00",
-    buffer_minutes: entry.buffer_minutes ?? 30,
+    morning_available: entry.morning_available,
+    afternoon_available: entry.afternoon_available,
+    evening_available: entry.evening_available,
   }));
 
   return apiRequest<TaskerSchedulePayloadEntry[]>(
@@ -37,14 +37,14 @@ export async function updateSchedule(taskerId: string, schedule: TaskerSchedule)
   );
 }
 
-export async function updateGracePeriod(taskerId: string, minutes: number) {
-  const schedule = await getSchedule(taskerId);
-  const updated = schedule.map((entry) => ({ ...entry, buffer_minutes: minutes }));
-  return updateSchedule(taskerId, updated);
+// No-op: buffer_minutes was removed from the schema when switching to time-preference slots.
+// Kept for API compatibility until WorkerSettingsScreen is updated.
+export async function updateGracePeriod(_taskerId: string, _minutes: number) {
+  return Promise.resolve();
 }
 
 export async function getAvailableSlots(taskerId: string, date: string) {
-  return apiRequest<AvailableSlotsResponse>(
+  return apiRequest<AvailableTimePrefResponse>(
     `/taskers/${encodeURIComponent(taskerId)}/available-slots?date=${encodeURIComponent(date)}`
   );
 }

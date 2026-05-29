@@ -11,13 +11,18 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 type RouteProps = RouteProp<BookingFlowParamList, "PaymentSuccess">;
 
+const TIME_PREF_LABEL: Record<string, string> = {
+  morning: "Morning (8 AM – 12 PM)",
+  afternoon: "Afternoon (12 PM – 5 PM)",
+  evening: "Evening (5 PM – 8 PM)",
+};
+
 export function PaymentSuccessScreen() {
   const route = useRoute<RouteProps>();
   const navigation = useNavigation();
-  const { taskId, scheduledAt, address } = route.params;
+  const { taskId, scheduledAt, address, timePreference } = route.params;
   const bookingRef = taskId.slice(0, 8).toUpperCase();
   const formattedDate = format(new Date(scheduledAt), "EEE, d MMM");
-  const formattedTime = format(new Date(scheduledAt), "h:mm a");
 
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -92,10 +97,12 @@ export function PaymentSuccessScreen() {
               <Ionicons name="location-outline" size={18} color={colors.subtext} />
               <Text style={styles.receiptValue} numberOfLines={1}>{address}</Text>
             </View>
-            <View style={[styles.receiptRow, { marginTop: spacing.sm }]}>
-              <Ionicons name="time-outline" size={18} color={colors.subtext} />
-              <Text style={styles.receiptValue}>{formattedTime}</Text>
-            </View>
+            {timePreference && (
+              <View style={[styles.receiptRow, { marginTop: spacing.sm }]}>
+                <Ionicons name="time-outline" size={18} color={colors.subtext} />
+                <Text style={styles.receiptValue}>{TIME_PREF_LABEL[timePreference] ?? timePreference}</Text>
+              </View>
+            )}
           </View>
         </Animated.View>
 

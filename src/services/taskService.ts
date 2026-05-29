@@ -37,17 +37,17 @@ export async function updateTaskStatus(id: string, status: TaskStatus, finalPric
   });
 }
 
-export async function submitQuote(id: string, price: number, estimatedDurationMinutes: number, notes?: string) {
+export async function submitQuote(id: string, price: number, notes?: string, expiresAt?: string, isDirectAccept?: boolean) {
   return apiRequest<APITask>(`/tasks/${encodeURIComponent(id)}/quote`, {
     method: "PUT",
-    body: { price, estimated_duration_minutes: estimatedDurationMinutes, notes },
+    body: { price, notes, ...(expiresAt ? { quote_expires_at: expiresAt } : {}), ...(isDirectAccept ? { is_direct_accept: true } : {}) },
   });
 }
 
-export async function respondToQuote(id: string, accepted: boolean) {
+export async function respondToQuote(id: string, accepted: boolean, isDirectAccept?: boolean) {
   return apiRequest<APITask>(`/tasks/${encodeURIComponent(id)}/quote/respond`, {
     method: "PUT",
-    body: { action: accepted ? "accept" : "reject" },
+    body: { action: accepted ? "accept" : "reject", ...(isDirectAccept ? { is_direct_accept: true } : {}) },
   });
 }
 
@@ -67,6 +67,16 @@ export async function respondToDelay(id: string, action: 'wait' | 'cancel' | 're
     method: "POST",
     body: { action },
   });
+}
+
+export async function getTaskConflicts(id: string) {
+  return apiRequest<{ count: number; tasks: { id: string; first_name?: string; last_name?: string }[] }>(
+    `/tasks/${encodeURIComponent(id)}/conflicts`
+  );
+}
+
+export async function expireStaleRequests() {
+  return apiRequest<{ expired: number }>("/tasks/expire-stale", { method: "POST" });
 }
 
 export async function rescheduleTask(id: string, scheduledAt: string) {

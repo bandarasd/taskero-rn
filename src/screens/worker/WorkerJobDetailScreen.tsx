@@ -5,6 +5,7 @@ import {
   Image,
   ImageBackground,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -17,7 +18,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getTaskById, submitQuote, updateTaskStatus } from "../../services/taskService";
+import { getTaskById, submitQuote, respondToQuote, updateTaskStatus, getTaskConflicts } from "../../services/taskService";
 import { getUserById } from "../../services/userService";
 import { createThread } from "../../services/chatService";
 import { Avatar } from "../../components/common/Avatar";
@@ -83,19 +84,9 @@ function CustomerPhotosSkeleton() {
   );
 }
 
-function fmtDate(iso?: string | null) {
-  if (!iso) return "Not set";
-  return new Date(iso).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 const STATUS_STRIP_CONFIG: Record<string, { bg: string; dot: string; msg: string }> = {
-  pending: { bg: colors.warningLight, dot: colors.warning, msg: "Awaiting your quote" },
+  pending: { bg: colors.warningLight, dot: colors.warning, msg: "Review and accept this job" },
   quoted: { bg: colors.warningLight, dot: colors.warning, msg: "Quote sent — waiting for approval" },
   accepted: { bg: colors.infoLight, dot: colors.info, msg: "Ready to begin" },
   in_progress: { bg: colors.brandGreenLight, dot: colors.brandGreen, msg: "Job underway" },
@@ -112,16 +103,39 @@ export function WorkerJobDetailScreen() {
   const { dbUserId } = useAuth();
   const qc = useQueryClient();
   const [quotePrice, setQuotePrice] = useState("");
-  const [durationHours, setDurationHours] = useState(0);
-  const [durationMinutes, setDurationMinutes] = useState(0);
   const [quoteNotes, setQuoteNotes] = useState("");
+  const [quoteModalVisible, setQuoteModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
+  const [slaCountdown, setSlaCountdown] = useState("");
 
   const { data: task, isLoading } = useQuery({
     queryKey: ["task", taskId],
     queryFn: () => getTaskById(taskId),
   });
+
+  const { data: conflictsData } = useQuery({
+    queryKey: ["task-conflicts", taskId],
+    queryFn: () => getTaskConflicts(taskId),
+    enabled: task?.status === "pending",
+  });
+  const conflictCount = conflictsData?.count ?? 0;
+
+  // SLA countdown: pending tasks must be responded to within 24h of creation
+  useEffect(() => {
+    if (task?.status !== "pending" || !task?.created_at) return;
+    const update = () => {
+      const expiresAt = new Date(task.created_at!).getTime() + 24 * 60 * 60 * 1000;
+      const diff = expiresAt - Date.now();
+      if (diff <= 0) { setSlaCountdown("Expired"); return; }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      setSlaCountdown(`${h}h ${m}m`);
+    };
+    update();
+    const timer = setInterval(update, 60000);
+    return () => clearInterval(timer);
+  }, [task?.status, task?.created_at]);
 
   const { data: categoryData } = useCategoryByName(task?.category);
 
@@ -157,20 +171,23 @@ export function WorkerJobDetailScreen() {
   };
 
   const handleSubmitQuote = async () => {
-    const price = parseFloat(quotePrice);
-    const duration = durationHours * 60 + durationMinutes;
-    if (!price || isNaN(price)) {
-      Alert.alert("Enter a valid price");
+    const price = parseFloat(quotePrice) || expectedTotal;
+    if (!price) {
+      Alert.alert("No base price set for this job");
       return;
     }
-    if (duration <= 0) {
-      Alert.alert("Select an estimated duration");
-      return;
-    }
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     setLoading(true);
     try {
-      await submitQuote(taskId, price, duration, quoteNotes || undefined);
+      const isDirectAccept = price === expectedTotal;
+      await submitQuote(taskId, price, quoteNotes || undefined, expiresAt, isDirectAccept);
+      if (isDirectAccept) {
+        await respondToQuote(taskId, true, true);
+      }
       await refresh();
+      setQuoteModalVisible(false);
+      setQuotePrice("");
+      setQuoteNotes("");
     } catch (e: any) {
       Alert.alert("Error", e.message || "Could not submit quote");
     } finally {
@@ -192,6 +209,8 @@ export function WorkerJobDetailScreen() {
       setLoading(false);
     }
   };
+
+  const expectedTotal = Number(task?.base_price ?? 0) + Number(task?.surcharge_amount ?? 0);
 
   if (isLoading || !task) return (
     <View style={styles.mainContainer}>
@@ -254,23 +273,67 @@ export function WorkerJobDetailScreen() {
 
   return (
     <View style={styles.mainContainer}>
-      {/* Hero Header */}
-      <View style={styles.heroWrapper}>
-        <ImageBackground source={{ uri: imageUri }} style={styles.heroImage}>
-          <View style={styles.heroOverlay}>
-            <View style={styles.heroBottomContent}>
-              <Text style={styles.heroTitle}>{task.gig_title ?? task.title ?? "Service Request"}</Text>
-              <TaskStatusBadge status={task.status} />
+      {/* Accept Quote Modal */}
+      <Modal
+        visible={quoteModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setQuoteModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <TouchableOpacity style={styles.modalBackdropTouch} activeOpacity={1} onPress={() => setQuoteModalVisible(false)} />
+          <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Accept Job</Text>
+            {expectedTotal > 0 && (
+              <View style={styles.modalBasePriceRow}>
+                <Text style={styles.modalBasePriceLabel}>Estimated total</Text>
+                <Text style={styles.modalBasePriceValue}>Rs. {expectedTotal}</Text>
+              </View>
+            )}
+            <Text style={styles.modalFieldLabel}>Custom price (optional)</Text>
+            <View style={styles.priceInputWrapper}>
+              <Text style={styles.inputPrefix}>Rs.</Text>
+              <TextInput
+                style={styles.priceInput}
+                value={quotePrice}
+                onChangeText={setQuotePrice}
+                placeholder={expectedTotal > 0 ? String(expectedTotal) : "0.00"}
+                keyboardType="decimal-pad"
+                placeholderTextColor={colors.subtext}
+              />
+            </View>
+            <Text style={styles.modalHint}>Leave blank to accept the estimated price</Text>
+            <Text style={[styles.modalFieldLabel, { marginTop: 12 }]}>Notes for customer (optional)</Text>
+            <TextInput
+              style={styles.notesInput}
+              value={quoteNotes}
+              onChangeText={setQuoteNotes}
+              placeholder="Add any notes..."
+              multiline
+              placeholderTextColor={colors.subtext}
+            />
+            <View style={[styles.buttonRow, { marginTop: 16 }]}>
+              <Button
+                label="Cancel"
+                onPress={() => setQuoteModalVisible(false)}
+                variant="outline"
+                style={{ flex: 1 }}
+                disabled={loading}
+              />
+              <Button
+                label="Confirm"
+                onPress={handleSubmitQuote}
+                style={{ flex: 1 }}
+                loading={loading}
+              />
             </View>
           </View>
-        </ImageBackground>
-      </View>
-
-      {/* Status Strip */}
-      <View style={[styles.statusStrip, { backgroundColor: statusConfig.bg }]}>
-        <View style={[styles.statusDot, { backgroundColor: statusConfig.dot }]} />
-        <Text style={styles.statusMessage}>{statusConfig.msg}</Text>
-      </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -278,6 +341,23 @@ export function WorkerJobDetailScreen() {
         keyboardVerticalOffset={insets.bottom + 60}
       >
         <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, showStickyActions && { paddingBottom: 80 + insets.bottom }]}>
+          {/* Hero Header — scrolls with content */}
+          <View style={styles.heroWrapper}>
+            <ImageBackground source={{ uri: imageUri }} style={styles.heroImage}>
+              <View style={styles.heroOverlay}>
+                <View style={styles.heroBottomContent}>
+                  <Text style={styles.heroTitle}>{task.gig_title ?? task.title ?? "Service Request"}</Text>
+                  <TaskStatusBadge status={task.status} />
+                </View>
+              </View>
+            </ImageBackground>
+          </View>
+
+          {/* Status Strip */}
+          <View style={[styles.statusStrip, { backgroundColor: statusConfig.bg }]}>
+            <View style={[styles.statusDot, { backgroundColor: statusConfig.dot }]} />
+            <Text style={styles.statusMessage}>{statusConfig.msg}</Text>
+          </View>
           {/* Customer Section */}
           <View style={styles.section}>
             <View style={styles.customerRow}>
@@ -295,10 +375,66 @@ export function WorkerJobDetailScreen() {
 
           <SectionDivider />
 
+          {/* Late penalty banner */}
+          {(task.late_penalty_percent ?? 0) > 0 && (
+            <View style={styles.latePenaltyBanner}>
+              <Text style={styles.latePenaltyText}>
+                ⚠️ Late penalty: {task.late_penalty_percent}% will be deducted from your earnings
+                {task.late_penalty_amount != null ? ` (−Rs. ${Math.round(Number(task.late_penalty_amount))})` : ""}
+              </Text>
+            </View>
+          )}
+
+          {/* SLA countdown for pending tasks */}
+          {task.status === "pending" && slaCountdown !== "" && (
+            <View style={styles.slaBar}>
+              <Text style={styles.slaText}>
+                ⏱ Respond within {slaCountdown === "Expired" ? "— request expired" : slaCountdown}
+              </Text>
+            </View>
+          )}
+
+          {/* Conflict warning: another user booked the same slot */}
+          {task.status === "pending" && conflictCount > 0 && (
+            <View style={styles.conflictBanner}>
+              <Text style={styles.conflictText}>
+                ⚠️ {conflictCount === 1 ? "Another user has" : `${conflictCount} other users have`} also requested this slot. Accepting will automatically decline {conflictCount === 1 ? "their" : "those"} request{conflictCount > 1 ? "s" : ""}.
+              </Text>
+            </View>
+          )}
+
           {/* Job Details Section */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Job Details</Text>
-            <InfoRow icon="📅" label="Scheduled" value={fmtDate(task.scheduled_at)} />
+            {task.time_preference && (
+              <InfoRow
+                icon="🕐"
+                label="Time of day"
+                value={
+                  task.time_preference === "morning" ? "Morning (8 AM – 12 PM)" :
+                  task.time_preference === "afternoon" ? "Afternoon (12 PM – 5 PM)" :
+                  "Evening (5 PM – 8 PM)"
+                }
+              />
+            )}
+            {task.selected_tier_label && (
+              <InfoRow
+                icon="⚡"
+                label="Visit speed"
+                value={`${task.selected_tier_label} — within ${task.selected_tier_days ?? "?"} day${(task.selected_tier_days ?? 0) !== 1 ? "s" : ""}`}
+              />
+            )}
+            {task.promised_visit_date && (
+              <InfoRow
+                icon="🚩"
+                label="Must visit by"
+                value={(() => {
+                  const raw = task.promised_visit_date!;
+                  const d = new Date(raw.includes("T") ? raw : raw + "T00:00:00");
+                  return isNaN(d.getTime()) ? raw : d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+                })()}
+              />
+            )}
             <InfoRow icon="📍" label="Location" value={task.location_address ?? "—"} />
             <InfoRow icon="🏷" label="Category" value={task.category ?? "—"} />
             <InfoRow
@@ -306,6 +442,13 @@ export function WorkerJobDetailScreen() {
               label="Base Price"
               value={task.base_price != null ? `Rs. ${task.base_price}` : "—"}
             />
+            {(task.surcharge_amount ?? 0) > 0 && (
+              <InfoRow
+                icon="⚡"
+                label={`${task.selected_tier_label ?? "Speed"} surcharge`}
+                value={`+Rs. ${task.surcharge_amount}`}
+              />
+            )}
           </View>
 
           {/* Service Details (customer-selected fields) */}
@@ -363,137 +506,39 @@ export function WorkerJobDetailScreen() {
                   {task.status === "quoted" ? "Your Quote" : "Your Earnings"}
                 </Text>
                 <Text style={styles.earningsValue}>
-                  Rs. {task.quoted_price ?? task.base_price ?? 0}
+                  Rs. {task.quoted_price ?? expectedTotal}
                 </Text>
               </View>
             </>
           )}
 
-          {/* Quote Form (pending only) — buttons live inside here */}
+          {/* Pending actions */}
           {task.status === "pending" && (
             <>
               <SectionDivider />
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Send Your Quote</Text>
-                <View style={styles.quoteForm}>
-                  {/* Quote Price */}
-                  <View>
-                    <View style={styles.fieldLabelRow}>
-                      <Text style={styles.fieldLabel}>Quote Price</Text>
-                      <Text style={styles.requiredStar}> *</Text>
-                    </View>
-                    <View style={styles.priceInputWrapper}>
-                      <Text style={styles.inputPrefix}>Rs.</Text>
-                      <TextInput
-                        style={styles.priceInput}
-                        value={quotePrice}
-                        onChangeText={setQuotePrice}
-                        placeholder="0.00"
-                        keyboardType="decimal-pad"
-                        placeholderTextColor={colors.subtext}
-                      />
-                    </View>
-                  </View>
-
-                  {/* Estimated Duration — +/- stepper, no nested scroll */}
-                  <View>
-                    <View style={styles.fieldLabelRow}>
-                      <Text style={styles.fieldLabel}>Estimated Duration</Text>
-                      <Text style={styles.requiredStar}> *</Text>
-                    </View>
-                    <View style={styles.durationStepper}>
-                      {/* Hours */}
-                      <View style={styles.stepperUnit}>
-                        <Text style={styles.stepperLabel}>Hours</Text>
-                        <View style={styles.stepperRow}>
-                          <TouchableOpacity
-                            style={styles.stepperBtn}
-                            onPress={() => setDurationHours((h) => (h === 0 ? 23 : h - 1))}
-                          >
-                            <Text style={styles.stepperBtnText}>−</Text>
-                          </TouchableOpacity>
-                          <Text style={styles.stepperValue}>{String(durationHours).padStart(2, "0")}</Text>
-                          <TouchableOpacity
-                            style={styles.stepperBtn}
-                            onPress={() => setDurationHours((h) => (h === 23 ? 0 : h + 1))}
-                          >
-                            <Text style={styles.stepperBtnText}>+</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-
-                      <Text style={styles.stepperColon}>:</Text>
-
-                      {/* Minutes */}
-                      <View style={styles.stepperUnit}>
-                        <Text style={styles.stepperLabel}>Minutes</Text>
-                        <View style={styles.stepperRow}>
-                          <TouchableOpacity
-                            style={styles.stepperBtn}
-                            onPress={() => {
-                              const MINS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
-                              const idx = MINS.indexOf(durationMinutes);
-                              setDurationMinutes(MINS[idx === 0 ? MINS.length - 1 : idx - 1]);
-                            }}
-                          >
-                            <Text style={styles.stepperBtnText}>−</Text>
-                          </TouchableOpacity>
-                          <Text style={styles.stepperValue}>{String(durationMinutes).padStart(2, "0")}</Text>
-                          <TouchableOpacity
-                            style={styles.stepperBtn}
-                            onPress={() => {
-                              const MINS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
-                              const idx = MINS.indexOf(durationMinutes);
-                              setDurationMinutes(MINS[(idx + 1) % MINS.length]);
-                            }}
-                          >
-                            <Text style={styles.stepperBtnText}>+</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    </View>
-                    {(durationHours > 0 || durationMinutes > 0) && (
-                      <Text style={styles.durationSummary}>
-                        {durationHours}h {durationMinutes}m selected
-                      </Text>
-                    )}
-                  </View>
-
-                  {/* Notes (optional) */}
-                  <View>
-                    <Text style={styles.fieldLabel}>Notes for Customer</Text>
-                    <TextInput
-                      style={styles.notesInput}
-                      value={quoteNotes}
-                      onChangeText={setQuoteNotes}
-                      placeholder="Add notes for the customer (optional)..."
-                      multiline
-                      placeholderTextColor={colors.subtext}
-                    />
-                  </View>
-
-                  {/* Action buttons inside the form */}
-                  <View style={[styles.buttonRow, { marginTop: 8, paddingBottom: Math.max(insets.bottom, 12) }]}>
-                    <Button
-                      label="Decline"
-                      onPress={() => handleStatus("declined")}
-                      variant="outline"
-                      style={{ flex: 1 }}
-                      disabled={loading}
-                    />
-                    <Button
-                      label="Send Quote"
-                      onPress={handleSubmitQuote}
-                      style={{ flex: 1 }}
-                      loading={loading}
-                    />
-                  </View>
+                {task.base_price != null && (
+                  <Text style={styles.basePriceHint}>Base price: Rs. {task.base_price}</Text>
+                )}
+                <View style={[styles.buttonRow, { marginTop: 8, paddingBottom: Math.max(insets.bottom, 12) }]}>
+                  <Button
+                    label="Decline"
+                    onPress={() => handleStatus("declined")}
+                    variant="outline"
+                    style={{ flex: 1 }}
+                    disabled={loading}
+                  />
+                  <Button
+                    label="Accept"
+                    onPress={() => setQuoteModalVisible(true)}
+                    style={{ flex: 1 }}
+                    disabled={loading}
+                  />
                 </View>
               </View>
             </>
           )}
         </ScrollView>
-
       </KeyboardAvoidingView>
 
       {/* Sticky bottom bar for accepted / in_progress */}
@@ -652,6 +697,14 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: colors.brandGreen,
   },
+  latePenaltyBanner: {
+    backgroundColor: colors.warningLight,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    margin: spacing.md,
+    marginBottom: 0,
+  },
+  latePenaltyText: { fontSize: 13, fontWeight: "600", color: colors.warning, lineHeight: 18 },
   quoteForm: {
     gap: 12,
   },
@@ -788,5 +841,101 @@ const styles = StyleSheet.create({
     color: colors.subtext,
     marginTop: 8,
     textAlign: "center",
+  },
+  conflictBanner: {
+    backgroundColor: "#FEF3C7",
+    borderLeftWidth: 4,
+    borderLeftColor: "#F59E0B",
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+  },
+  conflictText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#92400E",
+    lineHeight: 18,
+  },
+  slaBar: {
+    backgroundColor: colors.warningLight,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    borderRadius: radius.sm,
+  },
+  slaText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.warning,
+  },
+  basePriceHint: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.subtext,
+    marginBottom: 4,
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  modalBackdropTouch: {
+    flex: 1,
+  },
+  modalSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 16,
+  },
+  modalBasePriceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: colors.brandGreenLight,
+    borderRadius: radius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  modalBasePriceLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.brandGreen,
+  },
+  modalBasePriceValue: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: colors.brandGreen,
+  },
+  modalFieldLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.subtext,
+    marginBottom: 8,
+  },
+  modalHint: {
+    fontSize: 12,
+    color: colors.subtext,
+    marginTop: 6,
+    marginBottom: 4,
   },
 });

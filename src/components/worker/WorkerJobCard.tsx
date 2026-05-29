@@ -15,8 +15,6 @@ function fmtDate(iso?: string | null) {
   const date = new Date(iso);
   return date.toLocaleDateString("en-US", {
     weekday: "short", month: "short", day: "numeric"
-  }) + " • " + date.toLocaleTimeString("en-US", {
-    hour: "numeric", minute: "2-digit"
   });
 }
 
@@ -34,7 +32,7 @@ export function WorkerJobCard({ task, onPress }: Props) {
   const price = task.quoted_price != null
     ? `Rs. ${task.quoted_price}`
     : task.base_price != null
-    ? `Rs. ${task.base_price}`
+    ? `Rs. ${Number(task.base_price ?? 0) + Number(task.surcharge_amount ?? 0)}`
     : "Pending";
 
   return (
